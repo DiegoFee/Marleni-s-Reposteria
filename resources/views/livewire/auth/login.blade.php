@@ -20,7 +20,7 @@ new #[Layout('components.layouts.auth')] class extends Component {
     public bool $remember = false;
 
     /**
-     * Handle an incoming authentication request.
+     * Gestiona una solicitud de autenticación.
      */
     public function login(): void
     {
@@ -43,7 +43,7 @@ new #[Layout('components.layouts.auth')] class extends Component {
     }
 
     /**
-     * Ensure the authentication request is not rate limited.
+     * Verifica que la solicitud de autenticación no esté limitada por frecuencia.
      */
     protected function ensureIsNotRateLimited(): void
     {
@@ -64,7 +64,7 @@ new #[Layout('components.layouts.auth')] class extends Component {
     }
 
     /**
-     * Get the authentication rate limiting throttle key.
+     * Obtiene la clave de limitación de frecuencia de autenticación.
      */
     protected function throttleKey(): string
     {
@@ -75,14 +75,14 @@ new #[Layout('components.layouts.auth')] class extends Component {
 <div class="flex flex-col gap-6">
     <x-auth-header title="Log in to your account" description="Enter your email and password below to log in" />
 
-    <!-- Session Status -->
+    <!-- Estado de la sesión -->
     <x-auth-session-status class="text-center" :status="session('status')" />
 
     <form wire:submit="login" class="flex flex-col gap-6">
-        <!-- Email Address -->
+        <!-- Correo electrónico -->
         <flux:input wire:model="email" label="{{ __('Email address') }}" type="email" name="email" required autofocus autocomplete="email" placeholder="email@example.com" />
 
-        <!-- Password -->
+        <!-- Contraseña -->
         <div class="relative">
             <flux:input
                 wire:model="password"
@@ -101,7 +101,7 @@ new #[Layout('components.layouts.auth')] class extends Component {
             @endif
         </div>
 
-        <!-- Remember Me -->
+        <!-- Recordarme -->
         <flux:checkbox wire:model="remember" label="{{ __('Remember me') }}" />
 
         <div class="flex items-center justify-end">

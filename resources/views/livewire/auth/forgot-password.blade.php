@@ -8,7 +8,7 @@ new #[Layout('components.layouts.auth')] class extends Component {
     public string $email = '';
 
     /**
-     * Send a password reset link to the provided email address.
+     * Envía un enlace para restablecer la contraseña al correo indicado.
      */
     public function sendPasswordResetLink(): void
     {
@@ -25,11 +25,11 @@ new #[Layout('components.layouts.auth')] class extends Component {
 <div class="flex flex-col gap-6">
     <x-auth-header title="Forgot password" description="Enter your email to receive a password reset link" />
 
-    <!-- Session Status -->
+    <!-- Estado de la sesión -->
     <x-auth-session-status class="text-center" :status="session('status')" />
 
     <form wire:submit="sendPasswordResetLink" class="flex flex-col gap-6">
-        <!-- Email Address -->
+        <!-- Correo electrónico -->
         <div class="grid gap-2">
             <flux:input wire:model="email" label="{{ __('Email Address') }}" type="email" name="email" required autofocus placeholder="email@example.com" />
         </div>

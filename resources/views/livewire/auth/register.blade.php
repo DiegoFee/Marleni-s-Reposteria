@@ -15,7 +15,7 @@ new #[Layout('components.layouts.auth')] class extends Component {
     public string $password_confirmation = '';
 
     /**
-     * Handle an incoming registration request.
+     * Gestiona una solicitud de registro.
      */
     public function register(): void
     {
@@ -38,21 +38,21 @@ new #[Layout('components.layouts.auth')] class extends Component {
 <div class="flex flex-col gap-6">
     <x-auth-header title="Create an account" description="Enter your details below to create your account" />
 
-    <!-- Session Status -->
+    <!-- Estado de la sesión -->
     <x-auth-session-status class="text-center" :status="session('status')" />
 
     <form wire:submit="register" class="flex flex-col gap-6">
-        <!-- Name -->
+        <!-- Nombre -->
         <div class="grid gap-2">
             <flux:input wire:model="name" id="name" label="{{ __('Name') }}" type="text" name="name" required autofocus autocomplete="name" placeholder="{{ __('Full name') }}" />
         </div>
 
-        <!-- Email Address -->
+        <!-- Correo electrónico -->
         <div class="grid gap-2">
             <flux:input wire:model="email" id="email" label="{{ __('Email address') }}" type="email" name="email" required autocomplete="email" placeholder="email@example.com" />
         </div>
 
-        <!-- Password -->
+        <!-- Contraseña -->
         <div class="grid gap-2">
             <flux:input
                 wire:model="password"
@@ -66,7 +66,7 @@ new #[Layout('components.layouts.auth')] class extends Component {
             />
         </div>
 
-        <!-- Confirm Password -->
+        <!-- Confirmar contraseña -->
         <div class="grid gap-2">
             <flux:input
                 wire:model="password_confirmation"

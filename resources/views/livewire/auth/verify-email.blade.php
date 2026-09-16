@@ -8,7 +8,7 @@ use Livewire\Volt\Component;
 
 new #[Layout('components.layouts.auth')] class extends Component {
     /**
-     * Send an email verification notification to the user.
+     * Envía una notificación de verificación al correo del usuario.
      */
     public function sendVerification(): void
     {
@@ -24,7 +24,7 @@ new #[Layout('components.layouts.auth')] class extends Component {
     }
 
     /**
-     * Log the current user out of the application.
+     * Cierra la sesión del usuario actual.
      */
     public function logout(Logout $logout): void
     {

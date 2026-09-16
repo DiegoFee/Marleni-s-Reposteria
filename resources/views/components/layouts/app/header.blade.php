@@ -25,7 +25,7 @@
                 </flux:tooltip>
             </flux:navbar>
 
-            <!-- Desktop User Menu -->
+            <!-- Menú de usuario de escritorio -->
             <flux:dropdown position="top" align="end">
                 <flux:profile
                     class="cursor-pointer"
@@ -70,7 +70,7 @@
             </flux:dropdown>
         </flux:header>
 
-        <!-- Mobile Menu -->
+        <!-- Menú móvil -->
         <flux:sidebar stashable sticky class="border-r border-brand-200 bg-white lg:hidden dark:border-brand-800 dark:bg-brand-950">
             <flux:sidebar.toggle class="lg:hidden" icon="x-mark" />
 

@@ -9,7 +9,7 @@ new #[Layout('components.layouts.auth')] class extends Component {
     public string $password = '';
 
     /**
-     * Confirm the current user's password.
+     * Confirma la contraseña del usuario actual.
      */
     public function confirmPassword(): void
     {
@@ -38,11 +38,11 @@ new #[Layout('components.layouts.auth')] class extends Component {
         description="This is a secure area of the application. Please confirm your password before continuing."
     />
 
-    <!-- Session Status -->
+    <!-- Estado de la sesión -->
     <x-auth-session-status class="text-center" :status="session('status')" />
 
     <form wire:submit="confirmPassword" class="flex flex-col gap-6">
-        <!-- Password -->
+        <!-- Contraseña -->
         <div class="grid gap-2">
             <flux:input
                 wire:model="password"

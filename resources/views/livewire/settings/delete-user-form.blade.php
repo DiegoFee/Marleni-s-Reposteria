@@ -8,7 +8,7 @@ new class extends Component {
     public string $password = '';
 
     /**
-     * Delete the currently authenticated user.
+     * Elimina al usuario autenticado.
      */
     public function deleteUser(Logout $logout): void
     {

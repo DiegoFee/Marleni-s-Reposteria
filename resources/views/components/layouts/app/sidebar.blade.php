@@ -28,7 +28,7 @@
                 </p>
             </div>
 
-            <!-- Desktop User Menu -->
+            <!-- Menú de usuario de escritorio -->
             <flux:dropdown position="bottom" align="start">
                 <flux:profile
                     :name="auth()->user()->name"
@@ -74,7 +74,7 @@
             </flux:dropdown>
         </flux:sidebar>
 
-        <!-- Mobile User Menu -->
+        <!-- Menú de usuario móvil -->
         <flux:header class="border-b border-brand-200 bg-white lg:hidden dark:border-brand-800 dark:bg-brand-950">
             <flux:sidebar.toggle class="lg:hidden" icon="bars-2" inset="left" />
 

@@ -18,7 +18,7 @@ new #[Layout('components.layouts.auth')] class extends Component {
     public string $password_confirmation = '';
 
     /**
-     * Mount the component.
+     * Inicializa el componente.
      */
     public function mount(string $token): void
     {
@@ -28,7 +28,7 @@ new #[Layout('components.layouts.auth')] class extends Component {
     }
 
     /**
-     * Reset the password for the given user.
+     * Restablece la contraseña del usuario indicado.
      */
     public function resetPassword(): void
     {
@@ -38,9 +38,9 @@ new #[Layout('components.layouts.auth')] class extends Component {
             'password' => ['required', 'string', 'confirmed', Rules\Password::defaults()],
         ]);
 
-        // Here we will attempt to reset the user's password. If it is successful we
-        // will update the password on an actual user model and persist it to the
-        // database. Otherwise we will parse the error and return the response.
+        // Intentamos restablecer la contraseña. Si tiene éxito, actualizamos la
+        // contraseña del usuario y la guardamos en la base de datos. De lo
+        // contrario, procesamos el error y devolvemos la respuesta.
         $status = Password::reset(
             $this->only('email', 'password', 'password_confirmation', 'token'),
             function ($user) {
@@ -53,9 +53,9 @@ new #[Layout('components.layouts.auth')] class extends Component {
             }
         );
 
-        // If the password was successfully reset, we will redirect the user back to
-        // the application's home authenticated view. If there is an error we can
-        // redirect them back to where they came from with their error message.
+        // Si la contraseña se restableció correctamente, redirigimos al usuario a
+        // la vista autenticada principal. Si ocurre un error, lo devolvemos al
+        // origen con el mensaje correspondiente.
         if ($status != Password::PasswordReset) {
             $this->addError('email', __($status));
 
@@ -71,16 +71,16 @@ new #[Layout('components.layouts.auth')] class extends Component {
 <div class="flex flex-col gap-6">
     <x-auth-header title="Reset password" description="Please enter your new password below" />
 
-    <!-- Session Status -->
+    <!-- Estado de la sesión -->
     <x-auth-session-status class="text-center" :status="session('status')" />
 
     <form wire:submit="resetPassword" class="flex flex-col gap-6">
-        <!-- Email Address -->
+        <!-- Correo electrónico -->
         <div class="grid gap-2">
             <flux:input wire:model="email" id="email" label="{{ __('Email') }}" type="email" name="email" required autocomplete="email" />
         </div>
 
-        <!-- Password -->
+        <!-- Contraseña -->
         <div class="grid gap-2">
             <flux:input
                 wire:model="password"
@@ -94,7 +94,7 @@ new #[Layout('components.layouts.auth')] class extends Component {
             />
         </div>
 
-        <!-- Confirm Password -->
+        <!-- Confirmar contraseña -->
         <div class="grid gap-2">
             <flux:input
                 wire:model="password_confirmation"
