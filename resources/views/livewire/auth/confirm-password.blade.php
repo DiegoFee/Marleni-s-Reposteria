@@ -52,7 +52,7 @@ new #[Layout('components.layouts.auth')] class extends Component {
                 name="password"
                 required
                 autocomplete="new-password"
-                placeholder="Password"
+                 placeholder="{{ __('Password') }}"
             />
         </div>
 

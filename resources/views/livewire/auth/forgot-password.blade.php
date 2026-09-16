@@ -38,7 +38,7 @@ new #[Layout('components.layouts.auth')] class extends Component {
     </form>
 
     <div class="space-x-1 text-center text-sm text-zinc-400">
-        Or, return to
-        <x-text-link href="{{ route('login') }}">log in</x-text-link>
+        {{ __('Or, return to') }}
+        <x-text-link href="{{ route('login') }}">{{ __('log in') }}</x-text-link>
     </div>
 </div>
