@@ -72,13 +72,13 @@ new #[Layout('components.layouts.auth')] class extends Component {
     }
 }; ?>
 
-<div class="flex flex-col gap-6">
-    <x-auth-header title="Log in to your account" description="Enter your email and password below to log in" />
+<div class="flex flex-col gap-7">
+    <x-auth-header title="Bienvenida a tu panel" description="Ingresa tus credenciales para continuar" />
 
     <!-- Estado de la sesión -->
     <x-auth-session-status class="text-center" :status="session('status')" />
 
-    <form wire:submit="login" class="flex flex-col gap-6">
+    <form wire:submit="login" class="flex flex-col gap-6 rounded-3xl border border-brand-200/80 bg-white/75 p-5 shadow-xl shadow-brand-900/5 backdrop-blur-sm sm:p-7 dark:border-brand-800 dark:bg-brand-900/55 dark:shadow-black/20">
         <!-- Correo electrónico -->
         <flux:input wire:model="email" label="{{ __('Email address') }}" type="email" name="email" required autofocus autocomplete="email" placeholder="email@example.com" />
 
@@ -95,17 +95,17 @@ new #[Layout('components.layouts.auth')] class extends Component {
             />
 
             @if (Route::has('password.request'))
-                <x-text-link class="absolute right-0 top-0" href="{{ route('password.request') }}">
+                <x-text-link class="absolute right-0 top-0" href="{{ route('password.request') }}" title="{{ __('Solicitar un enlace para restablecer la contraseña') }}">
                     {{ __('Forgot your password?') }}
                 </x-text-link>
             @endif
         </div>
 
         <!-- Recordarme -->
-        <flux:checkbox wire:model="remember" label="{{ __('Remember me') }}" />
+        <flux:checkbox wire:model="remember" label="{{ __('Remember me') }}" title="{{ __('Mantener la sesión iniciada en este dispositivo') }}" />
 
         <div class="flex items-center justify-end">
-            <flux:button variant="primary" type="submit" class="w-full">{{ __('Log in') }}</flux:button>
+            <flux:button variant="primary" type="submit" class="w-full" tooltip="{{ __('Ingresar al sistema') }}">{{ __('Ingresar') }}</flux:button>
         </div>
     </form>
 

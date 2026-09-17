@@ -1,6 +1,18 @@
-<div class="flex aspect-square size-8 items-center justify-center rounded-md bg-accent-content text-accent-foreground">
-    <x-app-logo-icon class="size-5 fill-current text-white dark:text-black" />
-</div>
-<div class="ml-1 grid flex-1 text-left text-sm">
-    <span class="mb-0.5 truncate leading-none font-semibold">{{ config('app.name') }}</span>
+@props([
+    'inverse' => false,
+])
+
+@php
+    $labelClasses = $inverse ? 'text-white' : 'text-brand-900 dark:text-brand-50';
+@endphp
+
+<div {{ $attributes->class('flex min-w-0 items-center gap-3') }}>
+    <picture class="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white/90 p-1 shadow-sm ring-1 ring-brand-200/70 dark:bg-brand-100 dark:ring-brand-300/40">
+        <source media="(max-width: 767px)" srcset="{{ asset('images/logoMOVIL.png') }}" />
+        <img src="{{ asset('images/logoPC.png') }}" alt="{{ config('app.name') }}" class="size-full object-contain" loading="eager" />
+    </picture>
+
+    <span class="min-w-0 truncate font-display text-lg font-semibold tracking-tight {{ $labelClasses }}">
+        {{ config('app.name') }}
+    </span>
 </div>

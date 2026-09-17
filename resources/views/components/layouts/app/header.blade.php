@@ -5,28 +5,30 @@
     </head>
     <body class="min-h-screen bg-brand-50 text-brand-950 dark:bg-brand-950 dark:text-brand-50">
         <flux:header container class="border-b border-brand-200 bg-white dark:border-brand-800 dark:bg-brand-950">
-            <flux:sidebar.toggle class="lg:hidden" icon="bars-2" inset="left" />
+            <flux:sidebar.toggle class="lg:hidden" icon="bars-2" inset="left" aria-label="{{ __('Abrir menu lateral') }}" title="{{ __('Abrir menu lateral') }}" />
 
-            <a href="{{ route('dashboard') }}" class="ml-2 mr-5 flex items-center gap-2 lg:ml-0" wire:navigate>
-                <x-app-logo class="size-8" href="#"></x-app-logo>
+            <a href="{{ route('dashboard') }}" class="ml-2 mr-5 min-w-0 max-w-[13rem] lg:ml-0" wire:navigate title="{{ __('Abrir el panel de control') }}">
+                <x-app-logo />
             </a>
 
             <flux:navbar class="-mb-px max-lg:hidden">
-                <flux:navbar.item icon="layout-grid" href="{{ route('dashboard') }}" :current="request()->routeIs('dashboard')" wire:navigate>
+                <flux:navbar.item icon="layout-grid" href="{{ route('dashboard') }}" :current="request()->routeIs('dashboard')" wire:navigate title="{{ __('Abrir el panel de control') }}">
                     {{ __('Panel') }}
                 </flux:navbar.item>
-                <flux:navbar.item icon="folder-git-2" href="{{ route('orders.index') }}" :current="request()->routeIs('orders.*')" wire:navigate>
+                <flux:navbar.item icon="folder-git-2" href="{{ route('orders.index') }}" :current="request()->routeIs('orders.*')" wire:navigate title="{{ __('Consultar y gestionar pedidos') }}">
                     {{ __('Pedidos') }}
                 </flux:navbar.item>
-                <flux:navbar.item icon="users" href="{{ route('customers.index') }}" :current="request()->routeIs('customers.*')" wire:navigate>
+                <flux:navbar.item icon="users" href="{{ route('customers.index') }}" :current="request()->routeIs('customers.*')" wire:navigate title="{{ __('Consultar y gestionar clientes') }}">
                     {{ __('Clientes') }}
                 </flux:navbar.item>
-                <flux:navbar.item icon="book-open-text" href="{{ route('catalogs.index') }}" :current="request()->routeIs('catalogs.*')" wire:navigate>
+                <flux:navbar.item icon="book-open-text" href="{{ route('catalogs.index') }}" :current="request()->routeIs('catalogs.*')" wire:navigate title="{{ __('Consultar catalogos activos') }}">
                     {{ __('Catalogos') }}
                 </flux:navbar.item>
             </flux:navbar>
 
             <flux:spacer />
+
+            <x-theme-toggle />
 
             <flux:navbar class="mr-1.5 space-x-0.5 py-0!">
                 <flux:tooltip content="{{ __('Buscar') }}" position="bottom">
@@ -39,6 +41,7 @@
                 <flux:profile
                     class="cursor-pointer"
                     :initials="auth()->user()->initials()"
+                    title="{{ __('Abrir el menú de usuario') }}"
                 />
 
                 <flux:menu>
@@ -64,14 +67,14 @@
                     <flux:menu.separator />
 
                     <flux:menu.radio.group>
-                        <flux:menu.item href="{{ route('settings.profile') }}" icon="cog" wire:navigate>{{ __('Settings') }}</flux:menu.item>
+                        <flux:menu.item href="{{ route('settings.profile') }}" icon="cog" wire:navigate title="{{ __('Abrir la configuración del perfil') }}">{{ __('Settings') }}</flux:menu.item>
                     </flux:menu.radio.group>
 
                     <flux:menu.separator />
 
                     <form method="POST" action="{{ route('logout') }}" class="w-full">
                         @csrf
-                        <flux:menu.item as="button" type="submit" icon="arrow-right-start-on-rectangle" class="w-full">
+                        <flux:menu.item as="button" type="submit" icon="arrow-right-start-on-rectangle" class="w-full" title="{{ __('Cerrar la sesión actual') }}">
                             {{ __('Log Out') }}
                         </flux:menu.item>
                     </form>
@@ -81,24 +84,24 @@
 
         <!-- Menú móvil -->
         <flux:sidebar stashable sticky class="border-r border-brand-200 bg-white lg:hidden dark:border-brand-800 dark:bg-brand-950">
-            <flux:sidebar.toggle class="lg:hidden" icon="x-mark" />
+            <flux:sidebar.toggle class="lg:hidden" icon="x-mark" aria-label="{{ __('Cerrar menu lateral') }}" title="{{ __('Cerrar menu lateral') }}" />
 
-            <a href="{{ route('dashboard') }}" class="ml-1 flex items-center gap-2" wire:navigate>
-                <x-app-logo class="size-8" href="#"></x-app-logo>
+            <a href="{{ route('dashboard') }}" class="ml-1 min-w-0" wire:navigate title="{{ __('Abrir el panel de control') }}">
+                <x-app-logo />
             </a>
 
             <flux:navlist variant="outline">
                 <flux:navlist.group heading="{{ __('Administracion') }}">
-                    <flux:navlist.item icon="layout-grid" href="{{ route('dashboard') }}" :current="request()->routeIs('dashboard')" wire:navigate>
+                    <flux:navlist.item icon="layout-grid" href="{{ route('dashboard') }}" :current="request()->routeIs('dashboard')" wire:navigate title="{{ __('Abrir el panel de control') }}">
                         {{ __('Panel') }}
                     </flux:navlist.item>
-                    <flux:navlist.item icon="folder-git-2" href="{{ route('orders.index') }}" :current="request()->routeIs('orders.*')" wire:navigate>
+                    <flux:navlist.item icon="folder-git-2" href="{{ route('orders.index') }}" :current="request()->routeIs('orders.*')" wire:navigate title="{{ __('Consultar y gestionar pedidos') }}">
                         {{ __('Pedidos') }}
                     </flux:navlist.item>
-                    <flux:navlist.item icon="users" href="{{ route('customers.index') }}" :current="request()->routeIs('customers.*')" wire:navigate>
+                    <flux:navlist.item icon="users" href="{{ route('customers.index') }}" :current="request()->routeIs('customers.*')" wire:navigate title="{{ __('Consultar y gestionar clientes') }}">
                         {{ __('Clientes') }}
                     </flux:navlist.item>
-                    <flux:navlist.item icon="book-open-text" href="{{ route('catalogs.index') }}" :current="request()->routeIs('catalogs.*')" wire:navigate>
+                    <flux:navlist.item icon="book-open-text" href="{{ route('catalogs.index') }}" :current="request()->routeIs('catalogs.*')" wire:navigate title="{{ __('Consultar catalogos activos') }}">
                         {{ __('Catalogos') }}
                     </flux:navlist.item>
                 </flux:navlist.group>

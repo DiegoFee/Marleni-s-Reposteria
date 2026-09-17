@@ -114,12 +114,15 @@ new class extends Component {
                 </p>
             </div>
 
-            <flux:button wire:click="startCreating" variant="primary" icon="plus">
+            <flux:button wire:click="startCreating" variant="primary" icon="plus" tooltip="{{ __('Abrir formulario para registrar un cliente') }}">
                 {{ __('Nuevo cliente') }}
             </flux:button>
         </header>
 
-        <section class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,24rem)]">
+        <section @class([
+            'grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,24rem)]' => $showForm,
+            'flex flex-col gap-6' => ! $showForm,
+        ])>
             <div class="flex flex-col gap-4">
                 <flux:input
                     wire:model.live.debounce.300ms="search"
@@ -137,7 +140,7 @@ new class extends Component {
                         </div>
                     @else
                         <div class="overflow-x-auto">
-                            <table class="min-w-full divide-y divide-brand-200 text-left text-sm dark:divide-brand-800">
+                            <table class="w-full min-w-[36rem] table-fixed divide-y divide-brand-200 text-left text-sm dark:divide-brand-800">
                                 <thead class="bg-brand-50 text-xs uppercase tracking-wide text-brand-700 dark:bg-brand-950/60 dark:text-brand-200">
                                     <tr>
                                         <th class="px-5 py-3 font-semibold" scope="col">{{ __('Nombre') }}</th>
@@ -151,7 +154,7 @@ new class extends Component {
                                             <td class="px-5 py-4 font-medium text-brand-950 dark:text-brand-50">{{ $customer->full_name }}</td>
                                             <td class="px-5 py-4 text-brand-700 dark:text-brand-200">{{ $customer->phone }}</td>
                                             <td class="px-5 py-4 text-right">
-                                                <flux:button wire:click="editCustomer({{ $customer->id }})" variant="ghost" size="sm">
+                                                <flux:button wire:click="editCustomer({{ $customer->id }})" variant="ghost" size="sm" tooltip="{{ __('Editar los datos de este cliente') }}">
                                                     {{ __('Editar') }}
                                                 </flux:button>
                                             </td>
@@ -182,10 +185,10 @@ new class extends Component {
                         <flux:input wire:model="phone" label="{{ __('Telefono') }}" name="phone" type="tel" required />
 
                         <div class="flex flex-col gap-2 sm:flex-row sm:justify-end">
-                            <flux:button wire:click="cancelForm" type="button" variant="ghost">
+                            <flux:button wire:click="cancelForm" type="button" variant="ghost" tooltip="{{ __('Cerrar el formulario sin guardar') }}">
                                 {{ __('Cancelar') }}
                             </flux:button>
-                            <flux:button type="submit" variant="primary">
+                            <flux:button type="submit" variant="primary" tooltip="{{ __('Guardar los datos del cliente') }}">
                                 {{ __('Guardar cliente') }}
                             </flux:button>
                         </div>

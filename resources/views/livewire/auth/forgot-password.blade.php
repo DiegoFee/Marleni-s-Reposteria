@@ -61,11 +61,11 @@ new #[Layout('components.layouts.auth')] class extends Component {
             <flux:input wire:model="email" label="{{ __('Email Address') }}" type="email" name="email" required autofocus placeholder="email@example.com" />
         </div>
 
-        <flux:button variant="primary" type="submit" class="w-full">{{ __('Email password reset link') }}</flux:button>
+        <flux:button variant="primary" type="submit" class="w-full" tooltip="{{ __('Enviar el enlace para restablecer la contraseña') }}">{{ __('Email password reset link') }}</flux:button>
     </form>
 
     <div class="space-x-1 text-center text-sm text-zinc-400">
         {{ __('Or, return to') }}
-        <x-text-link href="{{ route('login') }}">{{ __('log in') }}</x-text-link>
+        <x-text-link href="{{ route('login') }}" title="{{ __('Volver al inicio de sesión') }}">{{ __('log in') }}</x-text-link>
     </div>
 </div>

@@ -99,6 +99,30 @@ new class extends Component
 }; ?>
 
 <div class="mx-auto flex w-full max-w-7xl flex-col gap-8">
+    <section class="relative isolate overflow-hidden rounded-[2rem] bg-gradient-to-br from-brand-800 via-brand-700 to-brand-950 p-6 text-white shadow-xl shadow-brand-900/15 sm:p-8">
+        <div class="absolute -end-16 -top-24 size-72 rounded-full border border-brand-200/20 bg-brand-300/10"></div>
+        <div class="absolute -bottom-32 -start-20 size-80 rounded-full border border-white/10 bg-brand-500/20"></div>
+
+        <div class="relative flex flex-col gap-8 sm:flex-row sm:items-end sm:justify-between">
+            <div class="flex flex-col gap-5">
+                <x-app-logo inverse />
+                <div>
+                    <p class="text-xs font-semibold uppercase tracking-[0.28em] text-brand-200">
+                        {{ __('Panel de control') }}
+                    </p>
+                    <p class="mt-2 max-w-xl text-sm leading-6 text-brand-100/90">
+                        {{ __('Una vista clara para preparar, entregar y cobrar cada creación.') }}
+                    </p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2 self-start rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-brand-100 sm:self-end">
+                <span class="size-2 rounded-full bg-brand-300 shadow-[0_0_0_4px_rgba(243,199,196,0.15)]"></span>
+                {{ __('Gestion interna') }}
+            </div>
+        </div>
+    </section>
+
     <header class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div class="flex flex-col gap-2">
             <p class="text-sm font-semibold uppercase tracking-[0.18em] text-brand-600 dark:text-brand-300">
@@ -112,7 +136,7 @@ new class extends Component
             </p>
         </div>
 
-        <flux:button href="{{ route('orders.create') }}" wire:navigate variant="primary" icon="plus">
+        <flux:button href="{{ route('orders.create') }}" wire:navigate variant="primary" icon="plus" tooltip="{{ __('Abrir el formulario para registrar un pedido') }}">
             {{ __('Nuevo pedido') }}
         </flux:button>
     </header>
@@ -144,7 +168,7 @@ new class extends Component
                         <article wire:key="urgent-order-{{ $order->id }}" class="flex flex-col gap-4 py-5 first:pt-0 last:pb-0">
                             <div class="flex flex-col gap-2">
                                 <div class="flex flex-wrap items-center gap-2">
-                                    <a href="{{ route('orders.show', $order) }}" wire:navigate class="font-semibold text-accent hover:underline">
+                                    <a href="{{ route('orders.show', $order) }}" wire:navigate class="font-semibold text-accent hover:underline" title="{{ __('Abrir el detalle del pedido') }}">
                                         {{ $order->order_number }}
                                     </a>
                                     <flux:badge color="amber">{{ __('Pendiente') }}</flux:badge>
@@ -175,7 +199,7 @@ new class extends Component
                                 </div>
                             </dl>
 
-                            <flux:button href="{{ route('orders.show', $order) }}" wire:navigate variant="ghost" size="sm" class="self-start">
+                            <flux:button href="{{ route('orders.show', $order) }}" wire:navigate variant="ghost" size="sm" class="self-start" tooltip="{{ __('Abrir el detalle y el historial del pedido') }}">
                                 {{ __('Ver detalle') }}
                             </flux:button>
                         </article>
@@ -210,7 +234,7 @@ new class extends Component
                         <article wire:key="upcoming-order-{{ $order->id }}" class="flex flex-col gap-4 py-5 first:pt-0 last:pb-0">
                             <div class="flex flex-col gap-2">
                                 <div class="flex flex-wrap items-center gap-2">
-                                    <a href="{{ route('orders.show', $order) }}" wire:navigate class="font-semibold text-accent hover:underline">
+                                    <a href="{{ route('orders.show', $order) }}" wire:navigate class="font-semibold text-accent hover:underline" title="{{ __('Abrir el detalle del pedido') }}">
                                         {{ $order->order_number }}
                                     </a>
                                     <flux:badge color="amber">{{ __('Pendiente') }}</flux:badge>
@@ -241,7 +265,7 @@ new class extends Component
                                 </div>
                             </dl>
 
-                            <flux:button href="{{ route('orders.show', $order) }}" wire:navigate variant="ghost" size="sm" class="self-start">
+                            <flux:button href="{{ route('orders.show', $order) }}" wire:navigate variant="ghost" size="sm" class="self-start" tooltip="{{ __('Abrir el detalle y el historial del pedido') }}">
                                 {{ __('Ver detalle') }}
                             </flux:button>
                         </article>
@@ -277,7 +301,7 @@ new class extends Component
                     <article wire:key="balance-order-{{ $order->id }}" class="flex flex-col gap-4 py-5 first:pt-0 last:pb-0">
                         <div class="flex flex-col gap-2">
                             <div class="flex flex-wrap items-center gap-2">
-                                <a href="{{ route('orders.show', $order) }}" wire:navigate class="font-semibold text-accent hover:underline">
+                                <a href="{{ route('orders.show', $order) }}" wire:navigate class="font-semibold text-accent hover:underline" title="{{ __('Abrir el detalle del pedido') }}">
                                     {{ $order->order_number }}
                                 </a>
                                 <flux:badge color="amber">{{ __('Pendiente') }}</flux:badge>
@@ -307,7 +331,7 @@ new class extends Component
                             </div>
                         </dl>
 
-                        <flux:button href="{{ route('orders.show', $order) }}" wire:navigate variant="ghost" size="sm" class="self-start">
+                        <flux:button href="{{ route('orders.show', $order) }}" wire:navigate variant="ghost" size="sm" class="self-start" tooltip="{{ __('Abrir el detalle y el historial del pedido') }}">
                             {{ __('Ver detalle') }}
                         </flux:button>
                     </article>

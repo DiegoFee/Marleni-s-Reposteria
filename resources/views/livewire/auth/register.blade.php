@@ -81,7 +81,7 @@ new #[Layout('components.layouts.auth')] class extends Component {
         </div>
 
         <div class="flex items-center justify-end">
-            <flux:button type="submit" variant="primary" class="w-full">
+            <flux:button type="submit" variant="primary" class="w-full" tooltip="{{ __('Crear la cuenta y continuar') }}">
                 {{ __('Create account') }}
             </flux:button>
         </div>
@@ -89,6 +89,6 @@ new #[Layout('components.layouts.auth')] class extends Component {
 
     <div class="space-x-1 text-center text-sm text-zinc-600 dark:text-zinc-400">
         {{ __('Already have an account?') }}
-        <x-text-link href="{{ route('login') }}">{{ __('Log in') }}</x-text-link>
+        <x-text-link href="{{ route('login') }}" title="{{ __('Volver al inicio de sesión') }}">{{ __('Log in') }}</x-text-link>
     </div>
 </div>

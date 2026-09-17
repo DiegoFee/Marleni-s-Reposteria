@@ -1,5 +1,15 @@
 <x-layouts.app>
     <div class="mx-auto flex w-full max-w-7xl flex-col gap-8">
+        <section class="relative isolate overflow-hidden rounded-[2rem] bg-gradient-to-br from-brand-800 via-brand-700 to-brand-950 p-6 text-white shadow-xl shadow-brand-900/15 sm:p-8">
+            <div class="absolute -end-16 -top-24 size-72 rounded-full border border-brand-200/20 bg-brand-300/10"></div>
+            <div class="relative flex flex-col gap-5">
+                <x-app-logo inverse />
+                <p class="max-w-xl text-sm leading-6 text-brand-100/90">
+                    {{ __('Una vista clara para preparar, entregar y cobrar cada creación.') }}
+                </p>
+            </div>
+        </section>
+
         <header class="flex flex-col gap-2">
             <p class="text-sm font-semibold uppercase tracking-[0.18em] text-brand-600 dark:text-brand-300">
                 {{ __('Administracion') }}

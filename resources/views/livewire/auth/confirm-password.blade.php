@@ -56,6 +56,6 @@ new #[Layout('components.layouts.auth')] class extends Component {
             />
         </div>
 
-        <flux:button variant="primary" type="submit" class="w-full">{{ __('Confirm') }}</flux:button>
+        <flux:button variant="primary" type="submit" class="w-full" tooltip="{{ __('Confirmar la contraseña y continuar') }}">{{ __('Confirm') }}</flux:button>
     </form>
 </div>

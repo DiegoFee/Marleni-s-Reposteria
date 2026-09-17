@@ -4,40 +4,42 @@
         @include('partials.head')
     </head>
     <body class="min-h-screen bg-brand-50 antialiased dark:bg-brand-950">
-        <div class="relative grid h-dvh flex-col items-center justify-center px-8 sm:px-0 lg:max-w-none lg:grid-cols-2 lg:px-0">
-                <div class="relative hidden h-full flex-col bg-brand-950 p-10 text-white lg:flex dark:border-r dark:border-brand-800">
-                <div class="absolute inset-0 bg-neutral-900"></div>
-                <a href="{{ route('home') }}" class="relative z-20 flex items-center text-lg font-medium" wire:navigate>
-                    <span class="flex h-10 w-10 items-center justify-center rounded-md">
-                        <x-app-logo-icon class="mr-2 h-7 fill-current text-white" />
-                    </span>
-                    {{ config('app.name', 'Laravel') }}
-                </a>
+        <main class="grid min-h-svh lg:grid-cols-[minmax(0,1.12fr)_minmax(27rem,0.88fr)]">
+            <section class="relative isolate flex min-h-[38svh] overflow-hidden bg-brand-900 text-white lg:min-h-svh">
+                <video class="absolute inset-0 size-full object-cover opacity-75" autoplay muted loop playsinline preload="metadata" aria-hidden="true">
+                    <source media="(max-width: 1023px)" src="{{ asset('videos/promocionMOVIL.mp4') }}" type="video/mp4" />
+                    <source src="{{ asset('videos/promocionPC.mp4') }}" type="video/mp4" />
+                </video>
+                <div class="absolute inset-0 bg-gradient-to-br from-brand-950/90 via-brand-900/45 to-brand-700/35"></div>
+                <div class="absolute -end-20 -top-24 size-72 rounded-full border border-white/20 bg-brand-300/10 blur-sm"></div>
+                <div class="absolute -bottom-28 -start-24 size-80 rounded-full border border-brand-200/20 bg-brand-500/20 blur-sm"></div>
 
-                @php
-                    [$message, $author] = str(Illuminate\Foundation\Inspiring::quotes()->random())->explode('-');
-                @endphp
-
-                <div class="relative z-20 mt-auto">
-                    <blockquote class="space-y-2">
-                        <p class="text-lg">&ldquo;{{ trim($message) }}&rdquo;</p>
-                        <footer class="text-sm">{{ trim($author) }}</footer>
-                    </blockquote>
-                </div>
-            </div>
-            <div class="w-full lg:p-8">
-                <div class="mx-auto flex w-full flex-col justify-center space-y-6 sm:w-[350px]">
-                    <a href="{{ route('home') }}" class="z-20 flex flex-col items-center gap-2 font-medium lg:hidden" wire:navigate>
-                        <span class="flex h-9 w-9 items-center justify-center rounded-md">
-                            <x-app-logo-icon class="size-9 fill-current text-black dark:text-white" />
-                        </span>
-
-                        <span class="sr-only">{{ config('app.name', 'Laravel') }}</span>
+                <div class="relative z-10 flex w-full flex-col justify-between gap-10 p-6 sm:p-10 lg:p-14">
+                    <a href="{{ route('home') }}" class="w-fit" wire:navigate title="{{ __('Volver a la página principal') }}">
+                        <x-app-logo inverse />
                     </a>
+
+                    <div class="max-w-xl">
+                        <h1 class="max-w-lg text-4xl leading-tight text-white sm:text-5xl lg:text-6xl">
+                            {{ __('Cada pedido empieza con una historia dulce.') }}
+                        </h1>
+                        <p class="mt-5 max-w-md text-sm leading-7 text-brand-100/90 sm:text-base">
+                            {{ __('Organiza clientes, pedidos y entregas desde un espacio creado para trabajar con calma.') }}
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="relative flex min-h-[62svh] flex-col bg-brand-50 px-6 py-8 dark:bg-brand-950 sm:px-10 lg:min-h-svh lg:px-16 lg:py-10">
+                <div class="flex justify-end">
+                    <x-theme-toggle />
+                </div>
+
+                <div class="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-8 py-8">
                     {{ $slot }}
                 </div>
-            </div>
-        </div>
+            </section>
+        </main>
         @fluxScripts
     </body>
 </html>

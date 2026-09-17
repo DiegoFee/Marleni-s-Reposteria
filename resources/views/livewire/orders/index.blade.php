@@ -87,7 +87,7 @@ new class extends Component {
                 </p>
             </div>
 
-            <flux:button href="{{ route('orders.create') }}" wire:navigate variant="primary" icon="plus">
+            <flux:button href="{{ route('orders.create') }}" wire:navigate variant="primary" icon="plus" tooltip="{{ __('Abrir el formulario para registrar un pedido') }}">
                 {{ __('Nuevo pedido') }}
             </flux:button>
         </header>
@@ -109,7 +109,7 @@ new class extends Component {
                     </div>
                 @else
                     <div class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-brand-200 text-left text-sm dark:divide-brand-800">
+                        <table class="w-full min-w-[64rem] table-fixed divide-y divide-brand-200 text-left text-sm dark:divide-brand-800">
                             <thead class="bg-brand-50 text-xs uppercase tracking-wide text-brand-700 dark:bg-brand-950/60 dark:text-brand-200">
                                 <tr>
                                     <th class="px-5 py-3 font-semibold" scope="col">{{ __('Pedido') }}</th>
@@ -124,7 +124,7 @@ new class extends Component {
                                 @foreach ($this->orders as $order)
                                     <tr wire:key="order-{{ $order->id }}" class="align-middle">
                                         <td class="px-5 py-4">
-                                            <a href="{{ route('orders.show', $order) }}" wire:navigate class="font-semibold text-accent hover:underline">
+                                            <a href="{{ route('orders.show', $order) }}" wire:navigate class="font-semibold text-accent hover:underline" title="{{ __('Abrir el detalle del pedido') }}">
                                                 {{ $order->order_number }}
                                             </a>
                                             <p class="mt-1 text-xs text-brand-600 dark:text-brand-300">{{ $this->captureModeLabel($order->capture_mode) }}</p>
@@ -141,7 +141,7 @@ new class extends Component {
                                             </flux:badge>
                                         </td>
                                         <td class="px-5 py-4 text-right">
-                                            <flux:button href="{{ route('orders.show', $order) }}" wire:navigate variant="ghost" size="sm">
+                                            <flux:button href="{{ route('orders.show', $order) }}" wire:navigate variant="ghost" size="sm" tooltip="{{ __('Abrir el detalle y el historial del pedido') }}">
                                                 {{ __('Ver detalle') }}
                                             </flux:button>
                                         </td>

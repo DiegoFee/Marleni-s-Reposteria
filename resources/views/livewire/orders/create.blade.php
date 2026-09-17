@@ -197,7 +197,7 @@ new class extends Component {
 
 <div class="mx-auto flex w-full max-w-7xl flex-col gap-8">
         <header class="flex flex-col gap-3">
-            <a href="{{ route('orders.index') }}" wire:navigate class="text-sm font-semibold text-accent hover:underline">← {{ __('Volver a pedidos') }}</a>
+            <a href="{{ route('orders.index') }}" wire:navigate class="text-sm font-semibold text-accent hover:underline" title="{{ __('Volver al listado de pedidos') }}">← {{ __('Volver a pedidos') }}</a>
             <div class="flex flex-col gap-2">
                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-brand-600 dark:text-brand-300">
                     {{ __('Pedidos') }}
@@ -234,6 +234,7 @@ new class extends Component {
                                     <button
                                         wire:click="selectCustomer({{ $customer->id }})"
                                         type="button"
+                                        title="{{ __('Seleccionar este cliente para el pedido') }}"
                                         class="flex min-h-11 w-full flex-col gap-1 border-b border-brand-100 px-4 py-3 text-left last:border-0 hover:bg-brand-50 dark:border-brand-800 dark:hover:bg-brand-950"
                                     >
                                         <span class="font-medium text-brand-950 dark:text-brand-50">{{ $customer->full_name }}</span>
@@ -249,12 +250,12 @@ new class extends Component {
                                     <p class="font-semibold text-emerald-950 dark:text-emerald-50">{{ __('Cliente seleccionado') }}</p>
                                     <p class="mt-1 text-emerald-800 dark:text-emerald-100">{{ $customerSearch }}</p>
                                 </div>
-                                <flux:button wire:click="clearCustomer" type="button" variant="ghost" size="sm">
+                                <flux:button wire:click="clearCustomer" type="button" variant="ghost" size="sm" tooltip="{{ __('Quitar el cliente seleccionado y elegir otro') }}">
                                     {{ __('Cambiar') }}
                                 </flux:button>
                             </div>
                         @else
-                            <flux:button wire:click="$set('showCustomerForm', true)" type="button" variant="ghost" icon="user-plus">
+                            <flux:button wire:click="$set('showCustomerForm', true)" type="button" variant="ghost" icon="user-plus" tooltip="{{ __('Registrar un cliente nuevo sin salir del pedido') }}">
                                 {{ __('Registrar cliente nuevo') }}
                             </flux:button>
                         @endif
@@ -264,10 +265,10 @@ new class extends Component {
                                 <flux:input wire:model="newCustomerName" label="{{ __('Nombre completo') }}" name="newCustomerName" />
                                 <flux:input wire:model="newCustomerPhone" label="{{ __('Telefono') }}" name="newCustomerPhone" type="tel" />
                                 <div class="flex flex-col gap-2 sm:col-span-2 sm:flex-row sm:justify-end">
-                                    <flux:button wire:click="$set('showCustomerForm', false)" type="button" variant="ghost">
+                                    <flux:button wire:click="$set('showCustomerForm', false)" type="button" variant="ghost" tooltip="{{ __('Cerrar el formulario del cliente') }}">
                                         {{ __('Cancelar') }}
                                     </flux:button>
-                                    <flux:button wire:click="createCustomer" type="button" variant="primary">
+                                    <flux:button wire:click="createCustomer" type="button" variant="primary" tooltip="{{ __('Crear y seleccionar este cliente') }}">
                                         {{ __('Usar este cliente') }}
                                     </flux:button>
                                 </div>
@@ -324,7 +325,7 @@ new class extends Component {
 
                 <section class="rounded-2xl border border-brand-200 bg-brand-50 p-6 dark:border-brand-800 dark:bg-brand-950/50">
                     <p class="text-sm leading-6 text-brand-800 dark:text-brand-100">{{ __('Al guardar se creara el pedido con estado pendiente y se registrara su historial inicial.') }}</p>
-                    <flux:button type="submit" variant="primary" class="mt-5 w-full">
+                    <flux:button type="submit" variant="primary" class="mt-5 w-full" tooltip="{{ __('Guardar el pedido con la información indicada') }}">
                         {{ __('Guardar pedido') }}
                     </flux:button>
                 </section>

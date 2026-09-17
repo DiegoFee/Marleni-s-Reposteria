@@ -109,7 +109,7 @@ new #[Layout('components.layouts.auth')] class extends Component {
         </div>
 
         <div class="flex items-center justify-end">
-            <flux:button type="submit" variant="primary" class="w-full">
+            <flux:button type="submit" variant="primary" class="w-full" tooltip="{{ __('Guardar la nueva contraseña') }}">
                 {{ __('Reset password') }}
             </flux:button>
         </div>

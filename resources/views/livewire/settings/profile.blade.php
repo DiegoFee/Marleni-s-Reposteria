@@ -86,6 +86,7 @@ new class extends Component {
 
                             <button
                                 wire:click.prevent="resendVerificationNotification"
+                                title="{{ __('Enviar nuevamente el correo de verificación') }}"
                                 class="rounded-md text-sm text-gray-600 underline hover:text-gray-900 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
                             >
                                 {{ __('Click here to re-send the verification email.') }}
@@ -103,7 +104,7 @@ new class extends Component {
 
             <div class="flex items-center gap-4">
                 <div class="flex items-center justify-end">
-                    <flux:button variant="primary" type="submit" class="w-full">{{ __('Save') }}</flux:button>
+                    <flux:button variant="primary" type="submit" class="w-full" tooltip="{{ __('Guardar los cambios del perfil') }}">{{ __('Save') }}</flux:button>
                 </div>
 
                 <x-action-message class="me-3" on="profile-updated">

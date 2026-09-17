@@ -414,7 +414,7 @@ new class extends Component {
 <div class="mx-auto flex w-full max-w-7xl flex-col gap-8">
         <header class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div class="flex flex-col gap-3">
-                <a href="{{ route('orders.index') }}" wire:navigate class="text-sm font-semibold text-accent hover:underline">← {{ __('Volver a pedidos') }}</a>
+                <a href="{{ route('orders.index') }}" wire:navigate class="text-sm font-semibold text-accent hover:underline" title="{{ __('Volver al listado de pedidos') }}">← {{ __('Volver a pedidos') }}</a>
                 <div class="flex flex-col gap-2">
                     <p class="text-sm font-semibold uppercase tracking-[0.18em] text-brand-600 dark:text-brand-300">{{ __('Detalle del pedido') }}</p>
                     <div class="flex flex-wrap items-center gap-3">
@@ -426,7 +426,7 @@ new class extends Component {
             </div>
 
             @if (! $editing)
-                <flux:button wire:click="startEditing" variant="primary" icon="pencil-square">
+                <flux:button wire:click="startEditing" variant="primary" icon="pencil-square" tooltip="{{ __('Editar los datos y el estado del pedido') }}">
                     {{ __('Editar pedido') }}
                 </flux:button>
             @endif
@@ -491,8 +491,8 @@ new class extends Component {
                     </section>
 
                     <section class="flex flex-col gap-2 sm:flex-row sm:justify-end">
-                        <flux:button wire:click="cancelEditing" type="button" variant="ghost">{{ __('Cancelar') }}</flux:button>
-                        <flux:button type="submit" variant="primary">{{ __('Guardar cambios') }}</flux:button>
+                        <flux:button wire:click="cancelEditing" type="button" variant="ghost" tooltip="{{ __('Descartar los cambios del pedido') }}">{{ __('Cancelar') }}</flux:button>
+                        <flux:button type="submit" variant="primary" tooltip="{{ __('Guardar los cambios del pedido') }}">{{ __('Guardar cambios') }}</flux:button>
                     </section>
                 </aside>
             </form>
@@ -582,7 +582,7 @@ new class extends Component {
                                     <div class="flex shrink-0 flex-col gap-3 sm:items-end">
                                         <p class="text-lg font-semibold text-brand-950 dark:text-brand-50">Q {{ $this->formatMoney($payment->amount) }}</p>
                                         @if ($payment->status === PaymentStatus::Registered)
-                                            <flux:button wire:click="requestPaymentVoid({{ $payment->id }})" variant="ghost" size="sm">
+                                            <flux:button wire:click="requestPaymentVoid({{ $payment->id }})" variant="ghost" size="sm" tooltip="{{ __('Abrir la confirmación para anular este pago') }}">
                                                 {{ __('Anular pago') }}
                                             </flux:button>
                                         @endif
@@ -604,7 +604,7 @@ new class extends Component {
                         <flux:input label="{{ __('Tipo de pago') }}" value="{{ $this->paymentTypeLabel($this->suggestedPaymentType) }}" readonly />
                         <flux:input wire:model="paymentPaidAt" label="{{ __('Fecha del pago') }}" type="datetime-local" required />
                         <flux:textarea wire:model="paymentNotes" label="{{ __('Nota opcional') }}" rows="3" />
-                        <flux:button type="submit" variant="primary" class="w-full">
+                        <flux:button type="submit" variant="primary" class="w-full" tooltip="{{ __('Registrar el pago y actualizar el saldo') }}">
                             {{ __('Registrar pago') }}
                         </flux:button>
                     </form>
@@ -621,10 +621,10 @@ new class extends Component {
                     <flux:textarea wire:model="voidReason" label="{{ __('Motivo de la anulacion') }}" rows="4" required />
 
                     <div class="flex flex-col gap-2 sm:flex-row sm:justify-end">
-                        <flux:button wire:click="cancelPaymentVoid" type="button" variant="ghost">
+                        <flux:button wire:click="cancelPaymentVoid" type="button" variant="ghost" tooltip="{{ __('Cerrar sin anular el pago') }}">
                             {{ __('Cancelar') }}
                         </flux:button>
-                        <flux:button type="submit" variant="danger">
+                        <flux:button type="submit" variant="danger" tooltip="{{ __('Confirmar la anulación de este pago') }}">
                             {{ __('Confirmar anulacion') }}
                         </flux:button>
                     </div>

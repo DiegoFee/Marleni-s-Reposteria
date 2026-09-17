@@ -29,7 +29,7 @@ new class extends Component {
     </div>
 
     <flux:modal.trigger name="confirm-user-deletion">
-        <flux:button variant="danger" x-data="" x-on:click.prevent="$dispatch('open-modal', 'confirm-user-deletion')">
+        <flux:button variant="danger" x-data="" x-on:click.prevent="$dispatch('open-modal', 'confirm-user-deletion')" tooltip="{{ __('Abrir la confirmación para eliminar la cuenta') }}">
             {{ __('Delete Account') }}
         </flux:button>
     </flux:modal.trigger>
@@ -48,10 +48,10 @@ new class extends Component {
 
             <div class="flex justify-end space-x-2">
                 <flux:modal.close>
-                    <flux:button variant="filled">{{ __('Cancel') }}</flux:button>
+                    <flux:button variant="filled" tooltip="{{ __('Cerrar sin eliminar la cuenta') }}">{{ __('Cancel') }}</flux:button>
                 </flux:modal.close>
 
-                <flux:button variant="danger" type="submit">{{ __('Delete Account') }}</flux:button>
+                <flux:button variant="danger" type="submit" tooltip="{{ __('Eliminar definitivamente la cuenta') }}">{{ __('Delete Account') }}</flux:button>
             </div>
         </form>
     </flux:modal>
