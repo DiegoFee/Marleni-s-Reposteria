@@ -137,6 +137,10 @@ new class extends Component {
 
     public function saveChanges(): void
     {
+        $this->cakeDescription = trim($this->cakeDescription);
+        $this->agreedPrice = trim($this->agreedPrice);
+        $this->deliveryAt = trim($this->deliveryAt);
+
         $validated = $this->validate($this->orderRules());
 
         $this->order = app(OrderService::class)->update($this->order, [
@@ -158,8 +162,12 @@ new class extends Component {
 
     public function savePayment(): void
     {
+        $this->paymentAmount = trim($this->paymentAmount);
+        $this->paymentPaidAt = trim($this->paymentPaidAt);
+        $this->paymentNotes = trim($this->paymentNotes);
+
         $validated = $this->validate([
-            'paymentAmount' => ['required', 'numeric', 'decimal:0,2', 'gt:0'],
+            'paymentAmount' => ['required', 'numeric', 'decimal:0,2', 'max:99999999.99', 'gt:0'],
             'paymentPaidAt' => ['required', 'date'],
             'paymentNotes' => ['nullable', 'string', 'max:500'],
         ], [
@@ -204,6 +212,8 @@ new class extends Component {
 
     public function voidPayment(): void
     {
+        $this->voidReason = trim($this->voidReason);
+
         $validated = $this->validate([
             'voidReason' => ['required', 'string', 'max:500'],
         ], [
@@ -341,7 +351,7 @@ new class extends Component {
             'cakeDescription' => $isStandard
                 ? ['nullable', 'string', 'max:500']
                 : ['required', 'string', 'max:500'],
-            'agreedPrice' => ['required', 'numeric', 'decimal:0,2', 'gt:0'],
+            'agreedPrice' => ['required', 'numeric', 'decimal:0,2', 'max:99999999.99', 'gt:0'],
             'deliveryAt' => ['required', 'date'],
             'status' => ['required', Rule::enum(OrderStatus::class)],
         ];

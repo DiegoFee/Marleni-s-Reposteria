@@ -20,6 +20,8 @@ use Illuminate\Validation\ValidationException;
 
 class OrderService
 {
+    private const MAX_MONEY = '99999999.99';
+
     /**
      * Crea un pedido, su anticipo inicial y la auditoria en una sola transaccion.
      *
@@ -34,15 +36,15 @@ class OrderService
 
             $this->validateCatalogSelection($captureMode, $data);
 
-            if ($agreedPrice->isLessThanOrEqualTo(0)) {
+            if ($agreedPrice->isLessThanOrEqualTo(0) || $agreedPrice->isGreaterThan(self::MAX_MONEY)) {
                 throw ValidationException::withMessages([
-                    'agreedPrice' => 'El precio pactado debe ser mayor que cero.',
+                    'agreedPrice' => 'El precio pactado debe estar entre 0.01 y 99,999,999.99.',
                 ]);
             }
 
-            if ($depositAmount->isNegative() || $depositAmount->isGreaterThan($agreedPrice)) {
+            if ($depositAmount->isNegative() || $depositAmount->isGreaterThan(self::MAX_MONEY) || $depositAmount->isGreaterThan($agreedPrice)) {
                 throw ValidationException::withMessages([
-                    'depositAmount' => 'El anticipo no puede superar el precio pactado.',
+                    'depositAmount' => 'El anticipo debe estar entre cero y el precio pactado.',
                 ]);
             }
 
@@ -118,9 +120,9 @@ class OrderService
 
             $this->validateCatalogSelection($captureMode, $data);
 
-            if ($agreedPrice->isLessThanOrEqualTo(0)) {
+            if ($agreedPrice->isLessThanOrEqualTo(0) || $agreedPrice->isGreaterThan(self::MAX_MONEY)) {
                 throw ValidationException::withMessages([
-                    'agreedPrice' => 'El precio pactado debe ser mayor que cero.',
+                    'agreedPrice' => 'El precio pactado debe estar entre 0.01 y 99,999,999.99.',
                 ]);
             }
 

@@ -14,6 +14,8 @@ use Illuminate\Validation\ValidationException;
 
 class PaymentService
 {
+    private const MAX_MONEY = '99999999.99';
+
     /**
      * Registra un pago y su auditoria con el pedido bloqueado.
      *
@@ -28,9 +30,9 @@ class PaymentService
                 ->firstOrFail();
             $amount = $this->money($data['amount'] ?? null);
 
-            if ($amount->isLessThanOrEqualTo(0)) {
+            if ($amount->isLessThanOrEqualTo(0) || $amount->isGreaterThan(self::MAX_MONEY)) {
                 throw ValidationException::withMessages([
-                    'paymentAmount' => 'El importe debe ser mayor que cero.',
+                    'paymentAmount' => 'El importe debe estar entre 0.01 y 99,999,999.99.',
                 ]);
             }
 

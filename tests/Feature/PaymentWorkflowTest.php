@@ -73,6 +73,19 @@ test('payments that exceed the agreed price are rejected without being persisted
     expect(ActivityLog::query()->where('order_id', $order->id)->where('event_type', ActivityEventType::PaymentRegistered->value)->count())->toBe(1);
 });
 
+test('payment forms reject amounts above the database precision', function () {
+    $user = User::factory()->create();
+    $order = Order::factory()->create(['agreed_price' => '99999999.99']);
+    $this->actingAs($user);
+
+    Volt::test('orders.show', ['order' => $order])
+        ->set('paymentAmount', '100000000.00')
+        ->call('savePayment')
+        ->assertHasErrors('paymentAmount');
+
+    expect(Payment::query()->where('order_id', $order->id)->count())->toBe(0);
+});
+
 test('payment voiding requires an in-page reason and recalculates the balance without deleting the payment', function () {
     $user = User::factory()->create();
     $this->actingAs($user);

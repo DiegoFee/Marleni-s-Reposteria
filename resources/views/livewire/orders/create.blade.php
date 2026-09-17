@@ -11,10 +11,12 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\Validate;
 use Livewire\Volt\Component;
 
 new class extends Component {
     public ?int $customerId = null;
+    #[Validate('string|max:100')]
     public string $customerSearch = '';
     public bool $showCustomerForm = false;
     public string $newCustomerName = '';
@@ -35,7 +37,7 @@ new class extends Component {
     #[Computed]
     public function customerOptions(): Collection
     {
-        $search = trim($this->customerSearch);
+        $search = mb_substr(trim($this->customerSearch), 0, 100);
 
         if ($search === '' || $this->customerId !== null) {
             return collect();
@@ -75,6 +77,12 @@ new class extends Component {
         $this->cakeDescription = '';
     }
 
+    public function updatedCustomerSearch(): void
+    {
+        $this->validateOnly('customerSearch');
+        unset($this->customerOptions);
+    }
+
     public function updatedBasePriceId(string $basePriceId): void
     {
         if ($basePriceId === '') {
@@ -110,14 +118,17 @@ new class extends Component {
 
     public function createCustomer(): void
     {
+        $this->newCustomerName = trim($this->newCustomerName);
+        $this->newCustomerPhone = trim($this->newCustomerPhone);
+
         $validated = $this->validate([
             'newCustomerName' => ['required', 'string', 'max:150'],
             'newCustomerPhone' => ['required', 'string', 'max:25'],
         ]);
 
         $attributes = [
-            'full_name' => trim($validated['newCustomerName']),
-            'phone' => trim($validated['newCustomerPhone']),
+            'full_name' => $validated['newCustomerName'],
+            'phone' => $validated['newCustomerPhone'],
         ];
 
         $customer = Customer::query()->firstOrCreate($attributes);
@@ -130,6 +141,11 @@ new class extends Component {
 
     public function save(): void
     {
+        $this->cakeDescription = trim($this->cakeDescription);
+        $this->agreedPrice = trim($this->agreedPrice);
+        $this->deliveryAt = trim($this->deliveryAt);
+        $this->depositAmount = trim($this->depositAmount);
+
         $validated = $this->validate($this->orderRules());
 
         $order = app(OrderService::class)->create([
@@ -167,9 +183,9 @@ new class extends Component {
             'cakeDescription' => $isStandard
                 ? ['nullable', 'string', 'max:500']
                 : ['required', 'string', 'max:500'],
-            'agreedPrice' => ['required', 'numeric', 'decimal:0,2', 'gt:0'],
+            'agreedPrice' => ['required', 'numeric', 'decimal:0,2', 'max:99999999.99', 'gt:0'],
             'deliveryAt' => ['required', 'date'],
-            'depositAmount' => ['nullable', 'numeric', 'decimal:0,2', 'min:0', 'lte:agreedPrice'],
+            'depositAmount' => ['nullable', 'numeric', 'decimal:0,2', 'max:99999999.99', 'min:0', 'lte:agreedPrice'],
         ];
     }
 

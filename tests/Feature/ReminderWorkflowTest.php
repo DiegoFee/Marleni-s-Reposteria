@@ -4,6 +4,7 @@ use App\Enums\ActivityEventType;
 use App\Enums\ReminderWindow;
 use App\Models\ActivityLog;
 use App\Models\Order;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Livewire\Volt\Volt;
@@ -18,6 +19,15 @@ beforeEach(function (): void {
         'services.notifications.telegram.api_url' => 'https://api.telegram.test',
         'services.notifications.telegram.bot_token' => 'telegram-token-for-test',
     ]);
+});
+
+test('registers the reminder command every minute without overlapping', function () {
+    $event = collect(app(Schedule::class)->events())
+        ->first(fn ($event): bool => str_contains($event->command ?? '', 'orders:send-reminders'));
+
+    expect($event)->not->toBeNull();
+    expect($event->expression)->toBe('* * * * *');
+    expect($event->withoutOverlapping)->toBeTrue();
 });
 
 test('sends audited reminders for both windows and excludes closed or expired orders', function () {

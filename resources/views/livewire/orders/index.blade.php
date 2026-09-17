@@ -6,18 +6,20 @@ use App\Models\Order;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\Validate;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
 
 new class extends Component {
     use WithPagination;
 
+    #[Validate('string|max:100')]
     public string $search = '';
 
     #[Computed]
     public function orders(): LengthAwarePaginator
     {
-        $search = trim($this->search);
+        $search = mb_substr(trim($this->search), 0, 100);
 
         return Order::query()
             ->with(['customer', 'cakeCategory', 'basePrice'])
@@ -38,6 +40,7 @@ new class extends Component {
 
     public function updatedSearch(): void
     {
+        $this->validateOnly('search');
         $this->resetPage();
         unset($this->orders);
     }

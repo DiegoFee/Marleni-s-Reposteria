@@ -23,6 +23,22 @@ test('reset password link can be requested', function () {
     Notification::assertSentTo($user, ResetPassword::class);
 });
 
+test('reset password link requests are rate limited', function () {
+    Notification::fake();
+
+    $user = User::factory()->create();
+    $component = Volt::test('auth.forgot-password')->set('email', $user->email);
+
+    for ($attempt = 0; $attempt < 6; $attempt++) {
+        $component->call('sendPasswordResetLink')->assertHasNoErrors();
+    }
+
+    $component
+        ->call('sendPasswordResetLink')
+        ->assertHasErrors('email')
+        ->assertSee('Demasiadas solicitudes de recuperación');
+});
+
 test('reset password screen can be rendered', function () {
     Notification::fake();
 

@@ -10,6 +10,7 @@ Route::middleware('guest')->group(function () {
         ->name('login');
 
     Volt::route('forgot-password', 'auth.forgot-password')
+        ->middleware('throttle:6,1')
         ->name('password.request');
 
     Volt::route('reset-password/{token}', 'auth.reset-password')

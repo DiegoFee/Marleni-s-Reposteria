@@ -124,4 +124,5 @@ test('admin seeder uses configured credentials and hashes the password', functio
 
     expect($admin->name)->toBe('Administradora de Prueba');
     expect(Hash::check('temporary-password', $admin->password))->toBeTrue();
+    expect($admin->email_verified_at)->not->toBeNull();
 });

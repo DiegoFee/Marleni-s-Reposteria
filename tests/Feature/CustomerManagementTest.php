@@ -53,3 +53,24 @@ test('customers can be updated from the customer page', function () {
     expect($customer->refresh()->full_name)->toBe('Nombre actualizado');
     expect($customer->phone)->toBe('5555-3333');
 });
+
+test('customer forms reject values that are empty after trimming', function () {
+    $this->actingAs(User::factory()->create());
+
+    Volt::test('customers.index')
+        ->call('startCreating')
+        ->set('fullName', '   ')
+        ->set('phone', '   ')
+        ->call('saveCustomer')
+        ->assertHasErrors(['fullName', 'phone']);
+
+    expect(Customer::query()->count())->toBe(0);
+});
+
+test('customer searches reject unbounded input', function () {
+    $this->actingAs(User::factory()->create());
+
+    Volt::test('customers.index')
+        ->set('search', str_repeat('a', 101))
+        ->assertHasErrors('search');
+});

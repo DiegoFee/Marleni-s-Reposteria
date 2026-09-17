@@ -4,12 +4,14 @@ use App\Models\Customer;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\Validate;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
 
 new class extends Component {
     use WithPagination;
 
+    #[Validate('string|max:100')]
     public string $search = '';
     public bool $showForm = false;
     public ?int $editingCustomerId = null;
@@ -19,7 +21,7 @@ new class extends Component {
     #[Computed]
     public function customers(): LengthAwarePaginator
     {
-        $search = trim($this->search);
+        $search = mb_substr(trim($this->search), 0, 100);
 
         return Customer::query()
             ->when($search !== '', function (Builder $query) use ($search): void {
@@ -35,6 +37,7 @@ new class extends Component {
 
     public function updatedSearch(): void
     {
+        $this->validateOnly('search');
         $this->resetPage();
         unset($this->customers);
     }
@@ -62,14 +65,17 @@ new class extends Component {
 
     public function saveCustomer(): void
     {
+        $this->fullName = trim($this->fullName);
+        $this->phone = trim($this->phone);
+
         $validated = $this->validate([
             'fullName' => ['required', 'string', 'max:150'],
             'phone' => ['required', 'string', 'max:25'],
         ]);
 
         $attributes = [
-            'full_name' => trim($validated['fullName']),
-            'phone' => trim($validated['phone']),
+            'full_name' => $validated['fullName'],
+            'phone' => $validated['phone'],
         ];
 
         if ($this->editingCustomerId === null) {

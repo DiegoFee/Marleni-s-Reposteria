@@ -123,6 +123,44 @@ test('standard orders require catalog references for their modality', function (
     expect(Order::query()->count())->toBe(0);
 });
 
+test('custom orders reject descriptions that are empty after trimming', function () {
+    $user = User::factory()->create();
+    $customer = Customer::factory()->create();
+    $this->actingAs($user);
+
+    Volt::test('orders.create')
+        ->set('customerId', $customer->id)
+        ->set('captureMode', CaptureMode::Custom->value)
+        ->set('cakeDescription', '   ')
+        ->set('agreedPrice', '275.00')
+        ->set('deliveryAt', now()->addDays(3)->format('Y-m-d H:i:s'))
+        ->call('save')
+        ->assertHasErrors('cakeDescription');
+
+    expect(Order::query()->count())->toBe(0);
+});
+
+test('order forms reject amounts above the database precision', function () {
+    $this->seed(CatalogSeeder::class);
+    $user = User::factory()->create();
+    $customer = Customer::factory()->create();
+    $category = CakeCategory::query()->firstOrFail();
+    $basePrice = BasePrice::query()->firstOrFail();
+    $this->actingAs($user);
+
+    Volt::test('orders.create')
+        ->set('customerId', $customer->id)
+        ->set('captureMode', CaptureMode::Standard->value)
+        ->set('cakeCategoryId', $category->id)
+        ->set('basePriceId', $basePrice->id)
+        ->set('agreedPrice', '100000000.00')
+        ->set('deliveryAt', now()->addDays(3)->format('Y-m-d H:i:s'))
+        ->call('save')
+        ->assertHasErrors('agreedPrice');
+
+    expect(Order::query()->count())->toBe(0);
+});
+
 test('inactive catalog entries cannot be selected for standard orders', function () {
     $this->actingAs(User::factory()->create());
     $customer = Customer::factory()->create();
@@ -198,4 +236,25 @@ test('order price cannot be reduced below registered payments during editing', f
 
     expect($order->refresh()->agreed_price)->toBe('180.00');
     expect($user->fresh())->not->toBeNull();
+});
+
+test('order details escape customer and cake text before rendering', function () {
+    $user = User::factory()->create();
+    $customer = Customer::factory()->create([
+        'full_name' => 'Cliente <script>xss()</script>',
+    ]);
+    $order = Order::factory()
+        ->custom()
+        ->for($customer)
+        ->for($user, 'createdBy')
+        ->create([
+            'cake_description' => 'Pastel <img src=x onerror=x>',
+        ]);
+    $this->actingAs($user);
+
+    Volt::test('orders.show', ['order' => $order])
+        ->assertSeeHtml('Cliente &lt;script&gt;xss()&lt;/script&gt;')
+        ->assertSeeHtml('Pastel &lt;img src=x onerror=x&gt;')
+        ->assertDontSeeHtml('<script>xss()</script>')
+        ->assertDontSeeHtml('<img src=x onerror=x>');
 });

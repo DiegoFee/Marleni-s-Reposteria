@@ -17,13 +17,14 @@ class AdminUserSeeder extends Seeder
             return;
         }
 
-        User::query()->updateOrCreate(
+        $admin = User::query()->updateOrCreate(
             ['email' => $email],
             [
                 'name' => config('admin.name', 'Administradora'),
                 'password' => Hash::make($password),
-                'email_verified_at' => now(),
             ],
         );
+
+        $admin->forceFill(['email_verified_at' => now()])->save();
     }
 }
