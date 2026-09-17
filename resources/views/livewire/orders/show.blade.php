@@ -4,12 +4,16 @@ use App\Enums\ActivityEventType;
 use App\Enums\CaptureMode;
 use App\Enums\OrderStatus;
 use App\Enums\PaymentStatus;
+use App\Enums\PaymentType;
 use App\Models\ActivityLog;
 use App\Models\BasePrice;
 use App\Models\CakeCategory;
 use App\Models\Customer;
 use App\Models\Order;
+use App\Models\Payment;
 use App\Services\Orders\OrderService;
+use App\Services\Payments\PaymentService;
+use Brick\Math\BigDecimal;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Collection;
@@ -29,6 +33,12 @@ new class extends Component {
     public string $agreedPrice = '';
     public string $deliveryAt = '';
     public string $status = '';
+    public string $paymentAmount = '';
+    public string $paymentPaidAt = '';
+    public string $paymentNotes = '';
+    public bool $showVoidForm = false;
+    public ?int $voidingPaymentId = null;
+    public string $voidReason = '';
 
     public function mount(Order $order): void
     {
@@ -61,6 +71,27 @@ new class extends Component {
     public function activeBasePrices(): Collection
     {
         return BasePrice::query()->where('is_active', true)->orderBy('amount')->get();
+    }
+
+    #[Computed]
+    public function registeredPaymentsTotal(): string
+    {
+        return (string) ($this->order->getAttribute('registered_payments_total') ?? '0.00');
+    }
+
+    #[Computed]
+    public function suggestedPaymentType(): PaymentType
+    {
+        $registeredTotal = $this->money($this->registeredPaymentsTotal());
+        $amount = $this->money($this->paymentAmount);
+
+        if ($registeredTotal->isEqualTo('0')) {
+            return PaymentType::Deposit;
+        }
+
+        return $amount->isPositive() && $registeredTotal->plus($amount)->isEqualTo((string) $this->order->agreed_price)
+            ? PaymentType::Settlement
+            : PaymentType::Partial;
     }
 
     public function startEditing(): void
@@ -125,6 +156,72 @@ new class extends Component {
         session()->flash('status', 'Pedido actualizado correctamente.');
     }
 
+    public function savePayment(): void
+    {
+        $validated = $this->validate([
+            'paymentAmount' => ['required', 'numeric', 'decimal:0,2', 'gt:0'],
+            'paymentPaidAt' => ['required', 'date'],
+            'paymentNotes' => ['nullable', 'string', 'max:500'],
+        ], [
+            'paymentAmount.required' => 'Indica el importe del pago.',
+            'paymentAmount.gt' => 'El importe debe ser mayor que cero.',
+            'paymentPaidAt.required' => 'Indica la fecha del pago.',
+        ]);
+
+        app(PaymentService::class)->register($this->order, [
+            'amount' => $validated['paymentAmount'],
+            'paid_at' => $validated['paymentPaidAt'],
+            'notes' => blank($validated['paymentNotes']) ? null : trim($validated['paymentNotes']),
+        ], Auth::user());
+
+        $this->resetPaymentForm();
+        $this->loadOrder($this->order);
+        unset($this->activityLogs, $this->registeredPaymentsTotal, $this->suggestedPaymentType);
+        session()->flash('status', 'Pago registrado correctamente.');
+    }
+
+    public function requestPaymentVoid(int $paymentId): void
+    {
+        Payment::query()
+            ->where('order_id', $this->order->getKey())
+            ->whereKey($paymentId)
+            ->where('status', PaymentStatus::Registered->value)
+            ->firstOrFail();
+
+        $this->voidingPaymentId = $paymentId;
+        $this->voidReason = '';
+        $this->showVoidForm = true;
+        $this->resetValidation();
+    }
+
+    public function cancelPaymentVoid(): void
+    {
+        $this->showVoidForm = false;
+        $this->voidingPaymentId = null;
+        $this->voidReason = '';
+        $this->resetValidation();
+    }
+
+    public function voidPayment(): void
+    {
+        $validated = $this->validate([
+            'voidReason' => ['required', 'string', 'max:500'],
+        ], [
+            'voidReason.required' => 'Indica el motivo de la anulacion.',
+        ]);
+
+        $payment = Payment::query()
+            ->where('order_id', $this->order->getKey())
+            ->findOrFail($this->voidingPaymentId);
+
+        app(PaymentService::class)->void($payment, trim($validated['voidReason']), Auth::user());
+
+        $this->cancelPaymentVoid();
+        $this->loadOrder($this->order);
+        unset($this->activityLogs, $this->registeredPaymentsTotal, $this->suggestedPaymentType);
+        session()->flash('status', 'Pago anulado correctamente.');
+    }
+
     public function captureModeLabel(CaptureMode $captureMode): string
     {
         return match ($captureMode) {
@@ -151,13 +248,15 @@ new class extends Component {
         };
     }
 
-    public function eventLabel(ActivityEventType $eventType): string
+    public function eventLabel(ActivityEventType $eventType, ?ActivityLog $activityLog = null): string
     {
         return match ($eventType) {
             ActivityEventType::OrderCreated => __('Pedido creado'),
             ActivityEventType::OrderUpdated => __('Pedido actualizado'),
             ActivityEventType::OrderStatusChanged => __('Estado actualizado'),
-            ActivityEventType::PaymentRegistered => __('Anticipo registrado'),
+            ActivityEventType::PaymentRegistered => ($activityLog?->details['payment_type'] ?? PaymentType::Deposit->value) === PaymentType::Deposit->value
+                ? __('Anticipo registrado')
+                : __('Pago registrado'),
             ActivityEventType::PaymentVoided => __('Pago anulado'),
             ActivityEventType::NotificationSent => __('Recordatorio enviado'),
             ActivityEventType::NotificationFailed => __('Recordatorio fallido'),
@@ -170,11 +269,47 @@ new class extends Component {
             ActivityEventType::OrderCreated => __('Se registro el pedido y su estado pendiente.'),
             ActivityEventType::OrderUpdated => __('Campos actualizados: ').implode(', ', $activityLog->details['fields'] ?? []),
             ActivityEventType::OrderStatusChanged => __('Cambio de ').($activityLog->details['from'] ?? '').__(' a ').($activityLog->details['to'] ?? ''),
-            ActivityEventType::PaymentRegistered => __('Anticipo de Q ').($activityLog->details['amount'] ?? '0.00'),
-            ActivityEventType::PaymentVoided => __('Pago anulado.'),
+            ActivityEventType::PaymentRegistered => $this->paymentTypeActivitySummary($activityLog),
+            ActivityEventType::PaymentVoided => __('Pago de Q ').($activityLog->details['amount'] ?? '0.00').' '.__('anulado: ').($activityLog->details['void_reason'] ?? ''),
             ActivityEventType::NotificationSent => __('Recordatorio confirmado.'),
             ActivityEventType::NotificationFailed => __('No se pudo enviar el recordatorio.'),
         };
+    }
+
+    public function paymentTypeLabel(PaymentType $paymentType): string
+    {
+        return match ($paymentType) {
+            PaymentType::Deposit => __('Anticipo'),
+            PaymentType::Partial => __('Abono'),
+            PaymentType::Settlement => __('Liquidacion'),
+        };
+    }
+
+    public function paymentTypeBadgeColor(PaymentType $paymentType): string
+    {
+        return match ($paymentType) {
+            PaymentType::Deposit => 'blue',
+            PaymentType::Partial => 'amber',
+            PaymentType::Settlement => 'green',
+        };
+    }
+
+    public function paymentStatusLabel(PaymentStatus $paymentStatus): string
+    {
+        return match ($paymentStatus) {
+            PaymentStatus::Registered => __('Registrado'),
+            PaymentStatus::Voided => __('Anulado'),
+        };
+    }
+
+    public function pendingBalance(): string
+    {
+        $balance = BigDecimal::of((string) $this->order->agreed_price)
+            ->minus($this->money($this->registeredPaymentsTotal()));
+
+        return ($balance->isNegative() ? BigDecimal::of('0') : $balance)
+            ->toScale(2)
+            ->toString();
     }
 
     public function formatMoney(mixed $amount): string
@@ -214,14 +349,21 @@ new class extends Component {
 
     private function loadOrder(Order $order): void
     {
-        $this->order = $order->load([
-            'customer',
-            'cakeCategory',
-            'basePrice',
-            'payments.registeredBy',
-            'activityLogs.actorUser',
-        ]);
+        $this->order = Order::query()
+            ->with([
+                'customer',
+                'cakeCategory',
+                'basePrice',
+                'payments.registeredBy',
+                'payments.voidedBy',
+                'activityLogs.actorUser',
+            ])
+            ->withSum([
+                'payments as registered_payments_total' => fn (Builder $query): Builder => $query->where('status', PaymentStatus::Registered->value),
+            ], 'amount')
+            ->findOrFail($order->getKey());
         $this->fillForm();
+        $this->resetPaymentForm();
         unset($this->activityLogs);
     }
 
@@ -235,6 +377,27 @@ new class extends Component {
         $this->agreedPrice = (string) $this->order->agreed_price;
         $this->deliveryAt = $this->order->delivery_at->format('Y-m-d\TH:i');
         $this->status = $this->order->status->value;
+    }
+
+    private function resetPaymentForm(): void
+    {
+        $this->paymentAmount = '';
+        $this->paymentPaidAt = now()->format('Y-m-d\TH:i');
+        $this->paymentNotes = '';
+        unset($this->suggestedPaymentType);
+    }
+
+    private function paymentTypeActivitySummary(ActivityLog $activityLog): string
+    {
+        $paymentType = PaymentType::tryFrom((string) ($activityLog->details['payment_type'] ?? PaymentType::Deposit->value));
+        $label = $paymentType === null ? __('Pago') : $this->paymentTypeLabel($paymentType);
+
+        return $label.__(' de Q ').($activityLog->details['amount'] ?? '0.00');
+    }
+
+    private function money(mixed $amount): BigDecimal
+    {
+        return is_numeric($amount) ? BigDecimal::of((string) $amount) : BigDecimal::of('0');
     }
 }; ?>
 
@@ -324,10 +487,6 @@ new class extends Component {
                 </aside>
             </form>
         @else
-            @php
-                $registeredPayments = $order->payments->where('status', PaymentStatus::Registered);
-            @endphp
-
             <div class="grid gap-6 lg:grid-cols-3">
                 <section class="rounded-2xl border border-brand-200 bg-white p-6 shadow-sm dark:border-brand-800 dark:bg-brand-900/50 lg:col-span-2">
                     <div class="flex flex-col gap-2">
@@ -359,20 +518,108 @@ new class extends Component {
                 </section>
 
                 <section class="rounded-2xl border border-brand-200 bg-white p-6 shadow-sm dark:border-brand-800 dark:bg-brand-900/50">
-                    <p class="text-sm font-semibold uppercase tracking-[0.18em] text-brand-600 dark:text-brand-300">{{ __('Resumen') }}</p>
+                    <p class="text-sm font-semibold uppercase tracking-[0.18em] text-brand-600 dark:text-brand-300">{{ __('Resumen financiero') }}</p>
                     <dl class="mt-5 flex flex-col gap-4">
                         <div class="flex items-center justify-between gap-4 text-sm">
                             <dt class="text-brand-700 dark:text-brand-200">{{ __('Precio pactado') }}</dt>
                             <dd class="font-semibold text-brand-950 dark:text-brand-50">Q {{ $this->formatMoney($order->agreed_price) }}</dd>
                         </div>
                         <div class="flex items-center justify-between gap-4 text-sm">
-                            <dt class="text-brand-700 dark:text-brand-200">{{ __('Anticipo registrado') }}</dt>
-                            <dd class="font-semibold text-brand-950 dark:text-brand-50">Q {{ $this->formatMoney($registeredPayments->sum('amount')) }}</dd>
+                            <dt class="text-brand-700 dark:text-brand-200">{{ __('Total pagado') }}</dt>
+                            <dd class="font-semibold text-brand-950 dark:text-brand-50">Q {{ $this->formatMoney($this->registeredPaymentsTotal) }}</dd>
+                        </div>
+                        <div class="flex items-center justify-between gap-4 border-t border-brand-100 pt-4 text-sm dark:border-brand-800">
+                            <dt class="font-semibold text-brand-700 dark:text-brand-200">{{ __('Saldo pendiente') }}</dt>
+                            <dd class="text-lg font-semibold text-accent">Q {{ $this->formatMoney($this->pendingBalance()) }}</dd>
                         </div>
                     </dl>
-                    <p class="mt-5 text-xs leading-5 text-brand-600 dark:text-brand-300">{{ __('Los abonos posteriores se habilitaran en la fase de pagos.') }}</p>
                 </section>
             </div>
+
+            <section class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,24rem)]">
+                <div class="rounded-2xl border border-brand-200 bg-white p-6 shadow-sm dark:border-brand-800 dark:bg-brand-900/50">
+                    <div class="flex flex-col gap-2">
+                        <h2 class="text-lg font-semibold text-brand-950 dark:text-brand-50">{{ __('Historial de pagos') }}</h2>
+                        <p class="text-sm text-brand-700 dark:text-brand-200">{{ __('Los pagos anulados se conservan y no afectan el saldo.') }}</p>
+                    </div>
+
+                    @if ($order->payments->isEmpty())
+                        <p class="mt-6 text-sm text-brand-700 dark:text-brand-200">{{ __('Todavia no hay pagos registrados.') }}</p>
+                    @else
+                        <div class="mt-6 flex flex-col divide-y divide-brand-100 dark:divide-brand-800">
+                            @foreach ($order->payments as $payment)
+                                <article wire:key="payment-{{ $payment->id }}" class="flex flex-col gap-4 py-5 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+                                    <div class="flex min-w-0 flex-col gap-2">
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <flux:badge color="{{ $this->paymentTypeBadgeColor($payment->payment_type) }}">{{ $this->paymentTypeLabel($payment->payment_type) }}</flux:badge>
+                                            <flux:badge color="{{ $payment->status === PaymentStatus::Registered ? 'green' : 'zinc' }}">{{ $this->paymentStatusLabel($payment->status) }}</flux:badge>
+                                        </div>
+                                        <p class="text-sm text-brand-700 dark:text-brand-200">{{ __('Fecha del pago') }}: {{ $this->formatDate($payment->paid_at) }}</p>
+                                        @if ($payment->registeredBy)
+                                            <p class="text-xs text-brand-600 dark:text-brand-300">{{ __('Registrado por') }}: {{ $payment->registeredBy->name }}</p>
+                                        @endif
+                                        @if ($payment->notes)
+                                            <p class="text-sm text-brand-700 dark:text-brand-200">{{ $payment->notes }}</p>
+                                        @endif
+                                        @if ($payment->status === PaymentStatus::Voided)
+                                            <p class="text-sm text-brand-700 dark:text-brand-200">{{ __('Motivo') }}: {{ $payment->void_reason }}</p>
+                                            @if ($payment->voidedBy)
+                                                <p class="text-xs text-brand-600 dark:text-brand-300">{{ __('Anulado por') }}: {{ $payment->voidedBy->name }} · {{ $this->formatDate($payment->voided_at) }}</p>
+                                            @endif
+                                        @endif
+                                    </div>
+
+                                    <div class="flex shrink-0 flex-col gap-3 sm:items-end">
+                                        <p class="text-lg font-semibold text-brand-950 dark:text-brand-50">Q {{ $this->formatMoney($payment->amount) }}</p>
+                                        @if ($payment->status === PaymentStatus::Registered)
+                                            <flux:button wire:click="requestPaymentVoid({{ $payment->id }})" variant="ghost" size="sm">
+                                                {{ __('Anular pago') }}
+                                            </flux:button>
+                                        @endif
+                                    </div>
+                                </article>
+                            @endforeach
+                        </div>
+                    @endif
+                </div>
+
+                <section class="h-fit rounded-2xl border border-brand-200 bg-brand-50 p-6 dark:border-brand-800 dark:bg-brand-950/50">
+                    <div class="flex flex-col gap-2">
+                        <h2 class="text-lg font-semibold text-brand-950 dark:text-brand-50">{{ __('Registrar pago') }}</h2>
+                        <p class="text-sm text-brand-700 dark:text-brand-200">{{ __('El sistema clasifica el pago segun el saldo disponible.') }}</p>
+                    </div>
+
+                    <form wire:submit="savePayment" class="mt-5 flex flex-col gap-4">
+                        <flux:input wire:model="paymentAmount" label="{{ __('Importe') }}" type="number" min="0.01" step="0.01" prefix="Q" required />
+                        <flux:input label="{{ __('Tipo de pago') }}" value="{{ $this->paymentTypeLabel($this->suggestedPaymentType) }}" readonly />
+                        <flux:input wire:model="paymentPaidAt" label="{{ __('Fecha del pago') }}" type="datetime-local" required />
+                        <flux:textarea wire:model="paymentNotes" label="{{ __('Nota opcional') }}" rows="3" />
+                        <flux:button type="submit" variant="primary" class="w-full">
+                            {{ __('Registrar pago') }}
+                        </flux:button>
+                    </form>
+                </section>
+            </section>
+
+            <flux:modal wire:model="showVoidForm" focusable class="max-w-lg">
+                <form wire:submit="voidPayment" class="flex flex-col gap-6">
+                    <div>
+                        <flux:heading size="lg">{{ __('Confirmar anulacion') }}</flux:heading>
+                        <flux:subheading>{{ __('El pago se conservara en el historial y dejara de contar para el saldo. Indica el motivo para continuar.') }}</flux:subheading>
+                    </div>
+
+                    <flux:textarea wire:model="voidReason" label="{{ __('Motivo de la anulacion') }}" rows="4" required />
+
+                    <div class="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                        <flux:button wire:click="cancelPaymentVoid" type="button" variant="ghost">
+                            {{ __('Cancelar') }}
+                        </flux:button>
+                        <flux:button type="submit" variant="danger">
+                            {{ __('Confirmar anulacion') }}
+                        </flux:button>
+                    </div>
+                </form>
+            </flux:modal>
 
             <section class="rounded-2xl border border-brand-200 bg-white p-6 shadow-sm dark:border-brand-800 dark:bg-brand-900/50">
                 <div class="flex flex-col gap-2">
@@ -387,7 +634,7 @@ new class extends Component {
                         @foreach ($this->activityLogs as $activityLog)
                             <li wire:key="activity-{{ $activityLog->id }}" class="flex flex-col gap-2 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
                                 <div>
-                                    <p class="font-semibold text-brand-950 dark:text-brand-50">{{ $this->eventLabel($activityLog->event_type) }}</p>
+                                    <p class="font-semibold text-brand-950 dark:text-brand-50">{{ $this->eventLabel($activityLog->event_type, $activityLog) }}</p>
                                     <p class="mt-1 text-sm text-brand-700 dark:text-brand-200">{{ $this->activitySummary($activityLog) }}</p>
                                     @if ($activityLog->actorUser)
                                         <p class="mt-2 text-xs text-brand-600 dark:text-brand-300">{{ __('Responsable') }}: {{ $activityLog->actorUser->name }}</p>
