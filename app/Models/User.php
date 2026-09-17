@@ -3,14 +3,16 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Str;
 
 class User extends Authenticatable // implements MustVerifyEmail
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
+    /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
 
     /**
@@ -45,6 +47,26 @@ class User extends Authenticatable // implements MustVerifyEmail
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    public function ordersCreated(): HasMany
+    {
+        return $this->hasMany(Order::class, 'created_by');
+    }
+
+    public function paymentsRegistered(): HasMany
+    {
+        return $this->hasMany(Payment::class, 'registered_by');
+    }
+
+    public function paymentsVoided(): HasMany
+    {
+        return $this->hasMany(Payment::class, 'voided_by');
+    }
+
+    public function activityLogs(): HasMany
+    {
+        return $this->hasMany(ActivityLog::class, 'actor_user_id');
     }
 
     /**
