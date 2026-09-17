@@ -8,7 +8,7 @@ Route::get('/', function () {
 })->name('home');
 
 Route::middleware(['auth'])->group(function () {
-    Route::view('dashboard', 'dashboard')->name('dashboard');
+    Volt::route('dashboard', 'dashboard')->name('dashboard');
 
     Volt::route('pedidos', 'orders.index')->name('orders.index');
     Volt::route('pedidos/crear', 'orders.create')->name('orders.create');
