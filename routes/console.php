@@ -11,3 +11,9 @@ Artisan::command('inspire', function () {
 Schedule::command('orders:send-reminders')
     ->everyMinute()
     ->withoutOverlapping();
+
+Schedule::command('app:backup-database')
+    ->dailyAt('02:00')
+    ->timezone((string) config('app.timezone'))
+    ->withoutOverlapping(120)
+    ->environments(['production']);
