@@ -27,10 +27,30 @@ test('users can authenticate using the login screen', function () {
 test('users can not authenticate with invalid password', function () {
     $user = User::factory()->create();
 
-    $this->post('/login', [
-        'email' => $user->email,
-        'password' => 'wrong-password',
-    ]);
+    LivewireVolt::test('auth.login')
+        ->set('email', $user->email)
+        ->set('password', 'wrong-password')
+        ->call('login')
+        ->assertHasErrors('email');
+
+    $this->assertGuest();
+});
+
+test('login attempts are limited after repeated invalid credentials', function () {
+    $user = User::factory()->create();
+
+    $login = LivewireVolt::test('auth.login')
+        ->set('email', $user->email)
+        ->set('password', 'wrong-password');
+
+    for ($attempt = 0; $attempt < 5; $attempt++) {
+        $login->call('login')->assertHasErrors('email');
+    }
+
+    $login
+        ->call('login')
+        ->assertHasErrors('email')
+        ->assertSee('Demasiados intentos');
 
     $this->assertGuest();
 });

@@ -14,6 +14,9 @@
             <flux:navlist variant="outline">
                 <flux:navlist.group heading="{{ __('Administracion') }}" class="grid">
                     <flux:navlist.item icon="home" :href="route('dashboard')" :current="request()->routeIs('dashboard')" wire:navigate>{{ __('Panel') }}</flux:navlist.item>
+                    <flux:navlist.item icon="folder-git-2" :href="route('orders.index')" :current="request()->routeIs('orders.*')" wire:navigate>{{ __('Pedidos') }}</flux:navlist.item>
+                    <flux:navlist.item icon="users" :href="route('customers.index')" :current="request()->routeIs('customers.*')" wire:navigate>{{ __('Clientes') }}</flux:navlist.item>
+                    <flux:navlist.item icon="book-open-text" :href="route('catalogs.index')" :current="request()->routeIs('catalogs.*')" wire:navigate>{{ __('Catalogos') }}</flux:navlist.item>
                 </flux:navlist.group>
             </flux:navlist>
 

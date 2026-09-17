@@ -109,8 +109,4 @@ new #[Layout('components.layouts.auth')] class extends Component {
         </div>
     </form>
 
-    <div class="space-x-1 text-center text-sm text-zinc-600 dark:text-zinc-400">
-        {{ __('Don\'t have an account?') }}
-        <x-text-link href="{{ route('register') }}">{{ __('Sign up') }}</x-text-link>
-    </div>
 </div>
