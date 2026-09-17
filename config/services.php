@@ -35,4 +35,21 @@ return [
         ],
     ],
 
+    'notifications' => [
+        'enabled' => (bool) env('NOTIFICATION_ENABLED', false),
+        'channel' => env('NOTIFICATION_CHANNEL', 'telegram'),
+        'recipient' => env('NOTIFICATION_RECIPIENT'),
+        'connect_timeout' => (int) env('NOTIFICATION_CONNECT_TIMEOUT', 3),
+        'timeout' => (int) env('NOTIFICATION_TIMEOUT', 10),
+        'telegram' => [
+            'api_url' => env('TELEGRAM_API_URL', 'https://api.telegram.org'),
+            'bot_token' => env('TELEGRAM_BOT_TOKEN'),
+        ],
+        'whatsapp' => [
+            'api_url' => env('WHATSAPP_API_URL', 'https://graph.facebook.com/v20.0'),
+            'access_token' => env('WHATSAPP_ACCESS_TOKEN'),
+            'phone_number_id' => env('WHATSAPP_PHONE_NUMBER_ID'),
+        ],
+    ],
+
 ];
