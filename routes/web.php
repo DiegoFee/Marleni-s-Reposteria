@@ -10,15 +10,11 @@ Route::get('/', function () {
 Route::middleware(['auth'])->group(function () {
     Route::view('dashboard', 'dashboard')->name('dashboard');
 
-    Route::view('pedidos', 'administracion.placeholder', [
-        'title' => 'Pedidos',
-        'description' => 'Registra y consulta los pedidos de la pastelería.',
-    ])->name('orders.index');
+    Volt::route('pedidos', 'orders.index')->name('orders.index');
+    Volt::route('pedidos/crear', 'orders.create')->name('orders.create');
+    Volt::route('pedidos/{order}', 'orders.show')->name('orders.show');
 
-    Route::view('clientes', 'administracion.placeholder', [
-        'title' => 'Clientes',
-        'description' => 'Administra los datos de contacto de tus clientes.',
-    ])->name('customers.index');
+    Volt::route('clientes', 'customers.index')->name('customers.index');
 
     Route::view('catalogos', 'administracion.placeholder', [
         'title' => 'Catálogos',

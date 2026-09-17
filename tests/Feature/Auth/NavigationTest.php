@@ -1,11 +1,13 @@
 <?php
 
+use App\Models\Order;
 use App\Models\User;
 
 test('guests are redirected to login from every internal route', function () {
     $internalRoutes = [
         route('dashboard'),
         route('orders.index'),
+        route('orders.create'),
         route('customers.index'),
         route('catalogs.index'),
         route('settings.profile'),
@@ -25,6 +27,7 @@ test('authenticated users can visit every navigation destination', function () {
     $navigationRoutes = [
         'dashboard',
         'orders.index',
+        'orders.create',
         'customers.index',
         'catalogs.index',
         'settings.profile',
@@ -35,6 +38,16 @@ test('authenticated users can visit every navigation destination', function () {
     foreach ($navigationRoutes as $navigationRoute) {
         $this->get(route($navigationRoute))->assertOk();
     }
+});
+
+test('order details remain protected by authentication', function () {
+    $order = Order::factory()->create();
+
+    $this->get(route('orders.show', $order))->assertRedirectToRoute('login');
+
+    $this->actingAs(User::factory()->create())
+        ->get(route('orders.show', $order))
+        ->assertOk();
 });
 
 test('root redirects authenticated users to the dashboard', function () {
