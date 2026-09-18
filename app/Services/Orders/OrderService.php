@@ -10,6 +10,7 @@ use App\Enums\PaymentType;
 use App\Models\ActivityLog;
 use App\Models\BasePrice;
 use App\Models\CakeCategory;
+use App\Models\Customer;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\User;
@@ -34,6 +35,7 @@ class OrderService
             $agreedPrice = $this->money($data['agreed_price']);
             $depositAmount = $this->money($data['deposit_amount'] ?? '0');
 
+            $this->validateCustomerSelection($data['customer_id'] ?? null);
             $this->validateCatalogSelection($captureMode, $data);
 
             if ($agreedPrice->isLessThanOrEqualTo(0) || $agreedPrice->isGreaterThan(self::MAX_MONEY)) {
@@ -106,6 +108,12 @@ class OrderService
                 ->lockForUpdate()
                 ->firstOrFail();
 
+            if ($lockedOrder->status !== OrderStatus::Pending) {
+                throw ValidationException::withMessages([
+                    'status' => 'Los pedidos entregados o cancelados ya no se pueden editar.',
+                ]);
+            }
+
             $captureMode = $this->captureMode($data['capture_mode']);
             $agreedPrice = $this->money($data['agreed_price']);
             $status = $data['status'] instanceof OrderStatus
@@ -118,6 +126,7 @@ class OrderService
                     ->sum('amount'),
             );
 
+            $this->validateCustomerSelection($data['customer_id'] ?? null);
             $this->validateCatalogSelection($captureMode, $data);
 
             if ($agreedPrice->isLessThanOrEqualTo(0) || $agreedPrice->isGreaterThan(self::MAX_MONEY)) {
@@ -129,6 +138,18 @@ class OrderService
             if ($agreedPrice->isLessThan($registeredPayments)) {
                 throw ValidationException::withMessages([
                     'agreedPrice' => 'El precio pactado no puede ser menor que los pagos activos.',
+                ]);
+            }
+
+            if ($status === OrderStatus::Cancelled && $registeredPayments->isPositive()) {
+                throw ValidationException::withMessages([
+                    'status' => 'Anula primero los pagos activos antes de cancelar el pedido.',
+                ]);
+            }
+
+            if ($status === OrderStatus::Delivered && ! $registeredPayments->isEqualTo($agreedPrice)) {
+                throw ValidationException::withMessages([
+                    'status' => 'El pedido solo puede marcarse como entregado cuando el precio pactado esté pagado por completo.',
                 ]);
             }
 
@@ -210,13 +231,13 @@ class OrderService
         if ($captureMode === CaptureMode::Custom) {
             if (filled($data['cake_category_id'] ?? null) || filled($data['base_price_id'] ?? null)) {
                 throw ValidationException::withMessages([
-                    'captureMode' => 'Un pedido personalizado no puede usar referencias del catalogo.',
+                    'captureMode' => 'Un pedido personalizado no puede usar referencias del catálogo.',
                 ]);
             }
 
             if (blank($data['cake_description'] ?? null)) {
                 throw ValidationException::withMessages([
-                    'cakeDescription' => 'La descripcion es obligatoria para un pedido personalizado.',
+                    'cakeDescription' => 'La descripción es obligatoria para un pedido personalizado.',
                 ]);
             }
 
@@ -225,7 +246,7 @@ class OrderService
 
         if (! CakeCategory::query()->whereKey($data['cake_category_id'] ?? null)->where('is_active', true)->exists()) {
             throw ValidationException::withMessages([
-                'cakeCategoryId' => 'Selecciona una categoria activa.',
+                'cakeCategoryId' => 'Selecciona una categoría activa.',
             ]);
         }
 
@@ -234,6 +255,17 @@ class OrderService
                 'basePriceId' => 'Selecciona un precio base activo.',
             ]);
         }
+    }
+
+    private function validateCustomerSelection(mixed $customerId): void
+    {
+        if (Customer::query()->whereKey($customerId)->exists()) {
+            return;
+        }
+
+        throw ValidationException::withMessages([
+            'customerId' => 'Selecciona un cliente existente o regístralo antes de guardar el pedido.',
+        ]);
     }
 
     private function generateOrderNumber(): string

@@ -18,7 +18,7 @@ new #[Layout('components.layouts.auth')] class extends Component {
         ]);
 
         if (! Auth::guard('web')->validate([
-            'email' => Auth::user()->email,
+            'username' => Auth::user()->username,
             'password' => $this->password,
         ])) {
             throw ValidationException::withMessages([
@@ -34,8 +34,8 @@ new #[Layout('components.layouts.auth')] class extends Component {
 
 <div class="flex flex-col gap-6">
     <x-auth-header
-        title="Confirm password"
-        description="This is a secure area of the application. Please confirm your password before continuing."
+         title="Confirmar contraseña"
+         description="Esta es un área segura. Confirma tu contraseña antes de continuar."
     />
 
     <!-- Estado de la sesión -->
@@ -47,15 +47,16 @@ new #[Layout('components.layouts.auth')] class extends Component {
             <flux:input
                 wire:model="password"
                 id="password"
-                label="{{ __('Password') }}"
+                label="{{ __('Contraseña') }}"
                 type="password"
                 name="password"
                 required
                 autocomplete="new-password"
-                 placeholder="{{ __('Password') }}"
+                autocomplete="current-password"
+                placeholder="{{ __('Contraseña') }}"
             />
         </div>
 
-        <flux:button variant="primary" type="submit" class="w-full" tooltip="{{ __('Confirmar la contraseña y continuar') }}">{{ __('Confirm') }}</flux:button>
+        <flux:button variant="primary" type="submit" class="w-full" tooltip="{{ __('Confirmar la contraseña y continuar') }}">{{ __('Confirmar') }}</flux:button>
     </form>
 </div>

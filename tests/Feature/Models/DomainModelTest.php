@@ -96,11 +96,14 @@ test('order numbers are unique', function () {
         ->toThrow(QueryException::class);
 });
 
-test('foreign keys prevent deleting a customer with orders', function () {
+test('soft deleting a customer keeps its orders available for historical access', function () {
     $customer = Customer::factory()->create();
-    Order::factory()->for($customer)->create();
+    $order = Order::factory()->delivered()->for($customer)->create();
 
-    expect(fn () => $customer->delete())->toThrow(QueryException::class);
+    $customer->delete();
+
+    $this->assertSoftDeleted($customer);
+    expect($order->refresh()->customer->is($customer->refresh()))->toBeTrue();
 });
 
 test('notification keys are unique when present', function () {
@@ -114,15 +117,14 @@ test('notification keys are unique when present', function () {
 test('admin seeder uses configured credentials and hashes the password', function () {
     config()->set([
         'admin.name' => 'Administradora de Prueba',
-        'admin.email' => 'admin@example.test',
+        'admin.username' => 'admin-prueba',
         'admin.password' => 'temporary-password',
     ]);
 
     $this->seed(AdminUserSeeder::class);
 
-    $admin = User::query()->where('email', 'admin@example.test')->firstOrFail();
+    $admin = User::query()->where('username', 'admin-prueba')->firstOrFail();
 
     expect($admin->name)->toBe('Administradora de Prueba');
     expect(Hash::check('temporary-password', $admin->password))->toBeTrue();
-    expect($admin->email_verified_at)->not->toBeNull();
 });

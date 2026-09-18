@@ -48,7 +48,7 @@ new class extends Component {
     public function captureModeLabel(CaptureMode $captureMode): string
     {
         return match ($captureMode) {
-            CaptureMode::Standard => __('Estandar'),
+            CaptureMode::Standard => __('Estándar'),
             CaptureMode::Custom => __('Personalizado'),
         };
     }
@@ -77,7 +77,7 @@ new class extends Component {
         <header class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div class="flex flex-col gap-2">
                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-brand-600 dark:text-brand-300">
-                    {{ __('Administracion') }}
+                    {{ __('Administración') }}
                 </p>
                 <h1 class="text-3xl font-semibold tracking-tight text-brand-950 dark:text-brand-50">
                     {{ __('Pedidos') }}
@@ -96,7 +96,7 @@ new class extends Component {
             <flux:input
                 wire:model.live.debounce.300ms="search"
                 label="{{ __('Buscar pedido') }}"
-                placeholder="{{ __('Numero, nombre o telefono') }}"
+                placeholder="{{ __('Número, nombre o teléfono') }}"
                 type="search"
                 autocomplete="off"
             />
@@ -105,7 +105,7 @@ new class extends Component {
                 @if ($this->orders->isEmpty())
                     <div class="p-8 text-center">
                         <p class="font-semibold text-brand-950 dark:text-brand-50">{{ __('No hay pedidos para mostrar.') }}</p>
-                        <p class="mt-2 text-sm text-brand-700 dark:text-brand-200">{{ __('Registra un pedido nuevo o prueba otra busqueda.') }}</p>
+                        <p class="mt-2 text-sm text-brand-700 dark:text-brand-200">{{ __('Registra un pedido nuevo o prueba otra búsqueda.') }}</p>
                     </div>
                 @else
                     <div class="overflow-x-auto">

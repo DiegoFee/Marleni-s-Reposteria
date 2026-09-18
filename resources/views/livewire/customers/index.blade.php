@@ -1,8 +1,10 @@
 <?php
 
+use App\Enums\OrderStatus;
 use App\Models\Customer;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Validation\Rule;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Validate;
 use Livewire\Volt\Component;
@@ -17,6 +19,8 @@ new class extends Component {
     public ?int $editingCustomerId = null;
     public string $fullName = '';
     public string $phone = '';
+    public bool $showDeleteConfirmation = false;
+    public ?int $deletingCustomerId = null;
 
     #[Computed]
     public function customers(): LengthAwarePaginator
@@ -68,9 +72,22 @@ new class extends Component {
         $this->fullName = trim($this->fullName);
         $this->phone = trim($this->phone);
 
+        $customer = $this->editingCustomerId === null
+            ? null
+            : Customer::query()->findOrFail($this->editingCustomerId);
+
         $validated = $this->validate([
-            'fullName' => ['required', 'string', 'max:150'],
-            'phone' => ['required', 'string', 'max:25'],
+            'fullName' => [
+                'required',
+                'string',
+                'max:100',
+                Rule::unique(Customer::class, 'full_name')->ignore($customer),
+            ],
+            'phone' => [
+                'required',
+                'digits:8',
+                Rule::unique(Customer::class, 'phone')->ignore($customer),
+            ],
         ]);
 
         $attributes = [
@@ -78,16 +95,49 @@ new class extends Component {
             'phone' => $validated['phone'],
         ];
 
-        if ($this->editingCustomerId === null) {
-            Customer::query()->firstOrCreate($attributes);
+        if ($customer === null) {
+            Customer::query()->create($attributes);
             session()->flash('status', 'Cliente registrado correctamente.');
         } else {
-            Customer::query()->findOrFail($this->editingCustomerId)->update($attributes);
+            $customer->update($attributes);
             session()->flash('status', 'Cliente actualizado correctamente.');
         }
 
         $this->resetForm();
         unset($this->customers);
+    }
+
+    public function requestDelete(int $customerId): void
+    {
+        Customer::query()->findOrFail($customerId);
+
+        $this->deletingCustomerId = $customerId;
+        $this->showDeleteConfirmation = true;
+        $this->resetValidation();
+    }
+
+    public function cancelDelete(): void
+    {
+        $this->showDeleteConfirmation = false;
+        $this->deletingCustomerId = null;
+        $this->resetValidation();
+    }
+
+    public function deleteCustomer(): void
+    {
+        $customer = Customer::query()->findOrFail($this->deletingCustomerId);
+
+        if ($customer->orders()->where('status', OrderStatus::Pending->value)->exists()) {
+            $this->cancelDelete();
+            $this->addError('deleteCustomer', 'No se puede borrar el cliente porque tiene pedidos pendientes o pagos por resolver.');
+
+            return;
+        }
+
+        $customer->delete();
+        $this->cancelDelete();
+        unset($this->customers);
+        session()->flash('status', 'Cliente borrado correctamente.');
     }
 
     private function resetForm(): void
@@ -104,7 +154,7 @@ new class extends Component {
         <header class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div class="flex flex-col gap-2">
                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-brand-600 dark:text-brand-300">
-                    {{ __('Administracion') }}
+                    {{ __('Administración') }}
                 </p>
                 <h1 class="text-3xl font-semibold tracking-tight text-brand-950 dark:text-brand-50">
                     {{ __('Clientes') }}
@@ -120,23 +170,27 @@ new class extends Component {
         </header>
 
         <section @class([
-            'grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,24rem)]' => $showForm,
-            'flex flex-col gap-6' => ! $showForm,
+            'grid min-w-0 w-full gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,24rem)]' => $showForm,
+            'flex min-w-0 w-full flex-col gap-6' => ! $showForm,
         ])>
-            <div class="flex flex-col gap-4">
+            <div class="order-2 flex min-w-0 flex-col gap-4 lg:order-1">
                 <flux:input
                     wire:model.live.debounce.300ms="search"
                     label="{{ __('Buscar cliente') }}"
-                    placeholder="{{ __('Nombre o telefono') }}"
+                    placeholder="{{ __('Nombre o teléfono') }}"
                     type="search"
                     autocomplete="off"
                 />
+
+                @error('deleteCustomer')
+                    <p class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-900/70 dark:bg-rose-950/30 dark:text-rose-200">{{ $message }}</p>
+                @enderror
 
                 <div class="overflow-hidden rounded-2xl border border-brand-200 bg-white shadow-sm dark:border-brand-800 dark:bg-brand-900/50">
                     @if ($this->customers->isEmpty())
                         <div class="p-8 text-center">
                             <p class="font-semibold text-brand-950 dark:text-brand-50">{{ __('No hay clientes para mostrar.') }}</p>
-                            <p class="mt-2 text-sm text-brand-700 dark:text-brand-200">{{ __('Prueba otra busqueda o registra un cliente nuevo.') }}</p>
+                            <p class="mt-2 text-sm text-brand-700 dark:text-brand-200">{{ __('Prueba otra búsqueda o registra un cliente nuevo.') }}</p>
                         </div>
                     @else
                         <div class="overflow-x-auto">
@@ -144,7 +198,7 @@ new class extends Component {
                                 <thead class="bg-brand-50 text-xs uppercase tracking-wide text-brand-700 dark:bg-brand-950/60 dark:text-brand-200">
                                     <tr>
                                         <th class="px-5 py-3 font-semibold" scope="col">{{ __('Nombre') }}</th>
-                                        <th class="px-5 py-3 font-semibold" scope="col">{{ __('Telefono') }}</th>
+                                        <th class="px-5 py-3 font-semibold" scope="col">{{ __('Teléfono') }}</th>
                                         <th class="px-5 py-3 text-right font-semibold" scope="col">{{ __('Acciones') }}</th>
                                     </tr>
                                 </thead>
@@ -154,9 +208,14 @@ new class extends Component {
                                             <td class="px-5 py-4 font-medium text-brand-950 dark:text-brand-50">{{ $customer->full_name }}</td>
                                             <td class="px-5 py-4 text-brand-700 dark:text-brand-200">{{ $customer->phone }}</td>
                                             <td class="px-5 py-4 text-right">
-                                                <flux:button wire:click="editCustomer({{ $customer->id }})" variant="ghost" size="sm" tooltip="{{ __('Editar los datos de este cliente') }}">
-                                                    {{ __('Editar') }}
-                                                </flux:button>
+                                                <div class="flex flex-wrap justify-end gap-2">
+                                                    <flux:button wire:click="editCustomer({{ $customer->id }})" variant="ghost" size="sm" tooltip="{{ __('Editar los datos de este cliente') }}">
+                                                        {{ __('Editar') }}
+                                                    </flux:button>
+                                                    <flux:button wire:click="requestDelete({{ $customer->id }})" variant="danger" size="sm" class="marleni-danger-button" tooltip="{{ __('Borrar este cliente si no tiene acciones pendientes') }}">
+                                                        {{ __('Borrar') }}
+                                                    </flux:button>
+                                                </div>
                                             </td>
                                         </tr>
                                     @endforeach
@@ -172,17 +231,17 @@ new class extends Component {
             </div>
 
             @if ($showForm)
-                <section class="h-fit rounded-2xl border border-brand-200 bg-white p-6 shadow-sm dark:border-brand-800 dark:bg-brand-900/50">
+                <section class="order-1 h-fit min-w-0 w-full max-w-full rounded-2xl border border-brand-200 bg-white p-6 shadow-sm dark:border-brand-800 dark:bg-brand-900/50 lg:order-2">
                     <div class="flex flex-col gap-2">
                         <h2 class="text-lg font-semibold text-brand-950 dark:text-brand-50">
                             {{ $editingCustomerId === null ? __('Nuevo cliente') : __('Editar cliente') }}
                         </h2>
-                        <p class="text-sm text-brand-700 dark:text-brand-200">{{ __('Completa el nombre y telefono de contacto.') }}</p>
+                        <p class="text-sm text-brand-700 dark:text-brand-200">{{ __('Completa el nombre y teléfono de contacto.') }}</p>
                     </div>
 
-                    <form wire:submit="saveCustomer" class="mt-6 flex flex-col gap-4">
-                        <flux:input wire:model="fullName" label="{{ __('Nombre completo') }}" name="fullName" required autofocus />
-                        <flux:input wire:model="phone" label="{{ __('Telefono') }}" name="phone" type="tel" required />
+                    <form wire:submit="saveCustomer" class="mt-6 flex min-w-0 w-full flex-col gap-4">
+                        <flux:input wire:model="fullName" label="{{ __('Nombre completo') }}" name="fullName" maxlength="100" required autofocus class="min-w-0 w-full" />
+                        <flux:input wire:model="phone" label="{{ __('Teléfono') }}" name="phone" type="tel" inputmode="numeric" maxlength="8" required class="min-w-0 w-full" />
 
                         <div class="flex flex-col gap-2 sm:flex-row sm:justify-end">
                             <flux:button wire:click="cancelForm" type="button" variant="ghost" tooltip="{{ __('Cerrar el formulario sin guardar') }}">
@@ -196,4 +255,25 @@ new class extends Component {
                 </section>
             @endif
         </section>
+
+        <flux:modal wire:model="showDeleteConfirmation" focusable class="max-w-lg border border-brand-200 bg-brand-50 dark:border-brand-700 dark:bg-brand-950">
+            <div class="flex flex-col gap-5 text-base">
+                <div class="flex items-start gap-4">
+                    <div class="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-brand-800 text-xl font-bold text-white shadow-lg shadow-brand-900/20">!</div>
+                    <div>
+                        <flux:heading size="lg" class="font-display text-brand-950 dark:text-brand-50">{{ __('¿Borrar cliente?') }}</flux:heading>
+                        <p class="mt-2 text-base leading-6 text-brand-700 dark:text-brand-200">{{ __('Se ocultará del catálogo.') }}</p>
+                    </div>
+                </div>
+
+                <div class="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                    <flux:button wire:click="cancelDelete" type="button" variant="ghost" tooltip="{{ __('Cerrar sin borrar el cliente') }}">
+                        {{ __('Cancelar') }}
+                    </flux:button>
+                    <flux:button wire:click="deleteCustomer" type="button" variant="danger" class="marleni-danger-button" tooltip="{{ __('Confirmar el borrado del cliente') }}">
+                        {{ __('Borrar') }}
+                    </flux:button>
+                </div>
+            </div>
+        </flux:modal>
 </div>

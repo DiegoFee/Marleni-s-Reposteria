@@ -3,6 +3,7 @@
 namespace App\Services\Payments;
 
 use App\Enums\ActivityEventType;
+use App\Enums\OrderStatus;
 use App\Enums\PaymentStatus;
 use App\Enums\PaymentType;
 use App\Models\Order;
@@ -28,6 +29,13 @@ class PaymentService
                 ->whereKey($order->getKey())
                 ->lockForUpdate()
                 ->firstOrFail();
+
+            if ($lockedOrder->status !== OrderStatus::Pending) {
+                throw ValidationException::withMessages([
+                    'payment' => 'Los pedidos entregados o cancelados ya no aceptan nuevos pagos.',
+                ]);
+            }
+
             $amount = $this->money($data['amount'] ?? null);
 
             if ($amount->isLessThanOrEqualTo(0) || $amount->isGreaterThan(self::MAX_MONEY)) {
@@ -92,6 +100,12 @@ class PaymentService
                 ->firstOrFail();
             $trimmedReason = trim($reason);
 
+            if ($lockedOrder->status !== OrderStatus::Pending) {
+                throw ValidationException::withMessages([
+                    'payment' => 'Los pagos de pedidos entregados o cancelados ya no se pueden modificar.',
+                ]);
+            }
+
             if ($lockedPayment->status !== PaymentStatus::Registered) {
                 throw ValidationException::withMessages([
                     'payment' => 'El pago seleccionado ya fue anulado.',
@@ -100,7 +114,7 @@ class PaymentService
 
             if ($trimmedReason === '') {
                 throw ValidationException::withMessages([
-                    'voidReason' => 'Indica el motivo de la anulacion.',
+                    'voidReason' => 'Indica el motivo de la anulación.',
                 ]);
             }
 

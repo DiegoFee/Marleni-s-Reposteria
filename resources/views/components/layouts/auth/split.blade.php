@@ -6,7 +6,7 @@
     <body class="min-h-screen bg-brand-50 antialiased dark:bg-brand-950">
         <main class="grid min-h-svh lg:grid-cols-[minmax(0,1.12fr)_minmax(27rem,0.88fr)]">
             <section class="relative isolate flex min-h-[38svh] overflow-hidden bg-brand-900 text-white lg:min-h-svh">
-                <video class="absolute inset-0 size-full object-cover opacity-75" autoplay muted loop playsinline preload="metadata" aria-hidden="true">
+                <video class="absolute inset-0 size-full object-cover opacity-75 motion-reduce:hidden" autoplay muted loop playsinline preload="metadata" aria-hidden="true">
                     <source media="(max-width: 1023px)" src="{{ asset('videos/promocionMOVIL.mp4') }}" type="video/mp4" />
                     <source src="{{ asset('videos/promocionPC.mp4') }}" type="video/mp4" />
                 </video>

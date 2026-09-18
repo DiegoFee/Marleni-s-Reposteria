@@ -11,6 +11,7 @@ use App\Models\Customer;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\User;
+use App\Services\Payments\PaymentService;
 use Database\Seeders\CatalogSeeder;
 use Livewire\Volt\Volt;
 
@@ -140,6 +141,22 @@ test('custom orders reject descriptions that are empty after trimming', function
     expect(Order::query()->count())->toBe(0);
 });
 
+test('order creation rejects a free-text customer that was not selected or registered', function () {
+    $user = User::factory()->create();
+    $this->actingAs($user);
+
+    Volt::test('orders.create')
+        ->set('customerSearch', 'Cliente que no existe')
+        ->set('captureMode', CaptureMode::Custom->value)
+        ->set('cakeDescription', 'Pastel personalizado')
+        ->set('agreedPrice', '275.00')
+        ->set('deliveryAt', now()->addDays(3)->format('Y-m-d H:i:s'))
+        ->call('save')
+        ->assertHasErrors('customerId');
+
+    expect(Order::query()->count())->toBe(0);
+});
+
 test('order forms reject amounts above the database precision', function () {
     $this->seed(CatalogSeeder::class);
     $user = User::factory()->create();
@@ -192,15 +209,21 @@ test('order detail displays history and audits controlled edits', function () {
     }
     $component->call('save');
     $order = Order::query()->latest('id')->firstOrFail();
+    app(PaymentService::class)->register($order, [
+        'amount' => '180.00',
+        'paid_at' => now(),
+    ], $user);
 
     Volt::test('orders.show', ['order' => $order])
         ->assertSee($order->order_number)
         ->assertSee('Historial del pedido')
         ->assertSee('Pedido creado')
-        ->assertSee('Se registro el pedido y su estado pendiente.')
+        ->assertSee('Se registró el pedido y su estado pendiente.')
         ->call('startEditing')
-        ->set('agreedPrice', '200.00')
+        ->assertSee('¿Borrar pedido?')
+        ->set('deliveryAt', now()->addDays(4)->format('Y-m-d H:i:s'))
         ->set('status', 'delivered')
+        ->call('confirmStatusChange')
         ->call('saveChanges')
         ->assertHasNoErrors()
         ->assertSee('Pedido actualizado')
@@ -209,7 +232,7 @@ test('order detail displays history and audits controlled edits', function () {
     expect(ActivityLog::query()->where('order_id', $order->id)->where('event_type', ActivityEventType::OrderUpdated->value)->exists())->toBeTrue();
     expect(ActivityLog::query()->where('order_id', $order->id)->where('event_type', ActivityEventType::OrderStatusChanged->value)->exists())->toBeTrue();
     expect($order->refresh()->status->value)->toBe('delivered');
-    expect($order->agreed_price)->toBe('200.00');
+    expect($order->agreed_price)->toBe('180.00');
     expect($user->fresh())->not->toBeNull();
 });
 
@@ -257,4 +280,96 @@ test('order details escape customer and cake text before rendering', function ()
         ->assertSeeHtml('Pastel &lt;img src=x onerror=x&gt;')
         ->assertDontSeeHtml('<script>xss()</script>')
         ->assertDontSeeHtml('<img src=x onerror=x>');
+});
+
+test('orders cannot be marked delivered until the agreed price is fully paid', function () {
+    $this->seed(CatalogSeeder::class);
+    $user = User::factory()->create();
+    $customer = Customer::factory()->create();
+    $category = CakeCategory::query()->firstOrFail();
+    $basePrice = BasePrice::query()->firstOrFail();
+    $this->actingAs($user);
+
+    $component = Volt::test('orders.create');
+    foreach (orderFormData($customer, $category, $basePrice) as $property => $value) {
+        $component->set($property, $value);
+    }
+    $component->call('save');
+    $order = Order::query()->latest('id')->firstOrFail();
+
+    Volt::test('orders.show', ['order' => $order])
+        ->call('startEditing')
+        ->set('status', 'delivered')
+        ->call('confirmStatusChange')
+        ->call('saveChanges')
+        ->assertHasErrors('status');
+
+    expect($order->refresh()->status->value)->toBe('pending');
+});
+
+test('terminal orders cannot be edited after delivery', function () {
+    $user = User::factory()->create();
+    $order = Order::factory()->delivered()->for($user, 'createdBy')->create();
+    $this->actingAs($user);
+
+    Volt::test('orders.show', ['order' => $order])
+        ->call('startEditing')
+        ->assertHasErrors('status')
+        ->call('saveChanges')
+        ->assertHasErrors('status');
+
+    expect($order->refresh()->status->value)->toBe('delivered');
+});
+
+test('terminal status changes require confirmation before saving', function () {
+    $user = User::factory()->create();
+    $order = Order::factory()->for($user, 'createdBy')->create();
+    $this->actingAs($user);
+
+    $component = Volt::test('orders.show', ['order' => $order])
+        ->call('startEditing')
+        ->set('status', 'cancelled');
+
+    $component
+        ->assertSet('showStatusConfirmation', true)
+        ->assertSet('status', 'pending')
+        ->call('cancelStatusChange')
+        ->assertSet('showStatusConfirmation', false)
+        ->assertSet('status', 'pending');
+
+    expect($order->refresh()->status->value)->toBe('pending');
+});
+
+test('orders with active payments cannot be cancelled', function () {
+    $user = User::factory()->create();
+    $order = Order::factory()->for($user, 'createdBy')->create();
+    $this->actingAs($user);
+
+    app(PaymentService::class)->register($order, [
+        'amount' => '50.00',
+        'paid_at' => now(),
+    ], $user);
+
+    Volt::test('orders.show', ['order' => $order->refresh()])
+        ->call('startEditing')
+        ->set('status', 'cancelled')
+        ->call('confirmStatusChange')
+        ->call('saveChanges')
+        ->assertHasErrors('status');
+
+    expect($order->refresh()->status->value)->toBe('pending');
+});
+
+test('pending orders can be deleted while their payments and history remain temporarily', function () {
+    $user = User::factory()->create();
+    $order = Order::factory()->for($user, 'createdBy')->create();
+    $payment = Payment::factory()->for($order)->for($user, 'registeredBy')->create();
+    $this->actingAs($user);
+
+    Volt::test('orders.show', ['order' => $order])
+        ->call('deleteOrder')
+        ->assertRedirect(route('orders.index', absolute: false));
+
+    $this->assertSoftDeleted($order);
+    $this->assertDatabaseHas('payments', ['id' => $payment->id]);
 });

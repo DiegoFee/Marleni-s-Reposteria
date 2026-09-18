@@ -7,12 +7,12 @@ Route::get('/', function () {
     return redirect()->route(auth()->check() ? 'dashboard' : 'login');
 })->name('home');
 
-Route::middleware(['auth'])->group(function () {
+Route::middleware(['auth', 'auth.session'])->group(function () {
     Volt::route('dashboard', 'dashboard')->name('dashboard');
 
     Volt::route('pedidos', 'orders.index')->name('orders.index');
     Volt::route('pedidos/crear', 'orders.create')->name('orders.create');
-    Volt::route('pedidos/{order}', 'orders.show')->name('orders.show');
+    Volt::route('pedidos/{order}', 'orders.show')->withTrashed()->name('orders.show');
 
     Volt::route('clientes', 'customers.index')->name('customers.index');
 
@@ -20,6 +20,8 @@ Route::middleware(['auth'])->group(function () {
         'title' => 'Catálogos',
         'description' => 'Consulta las categorías y los precios base activos.',
     ])->name('catalogs.index');
+
+    Volt::route('historial', 'history.index')->name('history.index');
 
     Route::redirect('settings', 'settings/profile');
 

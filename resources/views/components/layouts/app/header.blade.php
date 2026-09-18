@@ -5,7 +5,7 @@
     </head>
     <body class="min-h-screen bg-brand-50 text-brand-950 dark:bg-brand-950 dark:text-brand-50">
         <flux:header container class="border-b border-brand-200 bg-white dark:border-brand-800 dark:bg-brand-950">
-            <flux:sidebar.toggle class="lg:hidden" icon="bars-2" inset="left" aria-label="{{ __('Abrir menu lateral') }}" title="{{ __('Abrir menu lateral') }}" />
+            <flux:sidebar.toggle class="lg:hidden" icon="bars-2" inset="left" aria-label="{{ __('Abrir menú lateral') }}" title="{{ __('Abrir menú lateral') }}" />
 
             <a href="{{ route('dashboard') }}" class="ml-2 mr-5 min-w-0 max-w-[13rem] lg:ml-0" wire:navigate title="{{ __('Abrir el panel de control') }}">
                 <x-app-logo />
@@ -21,8 +21,11 @@
                 <flux:navbar.item icon="users" href="{{ route('customers.index') }}" :current="request()->routeIs('customers.*')" wire:navigate title="{{ __('Consultar y gestionar clientes') }}">
                     {{ __('Clientes') }}
                 </flux:navbar.item>
-                <flux:navbar.item icon="book-open-text" href="{{ route('catalogs.index') }}" :current="request()->routeIs('catalogs.*')" wire:navigate title="{{ __('Consultar catalogos activos') }}">
-                    {{ __('Catalogos') }}
+                <flux:navbar.item icon="book-open-text" href="{{ route('catalogs.index') }}" :current="request()->routeIs('catalogs.*')" wire:navigate title="{{ __('Consultar catálogos activos') }}">
+                    {{ __('Catálogos') }}
+                </flux:navbar.item>
+                <flux:navbar.item icon="clock" href="{{ route('history.index') }}" :current="request()->routeIs('history.*')" wire:navigate title="{{ __('Consultar pedidos entregados y archivados') }}">
+                    {{ __('Historial') }}
                 </flux:navbar.item>
             </flux:navbar>
 
@@ -58,7 +61,7 @@
 
                                 <div class="grid flex-1 text-left text-sm leading-tight">
                                     <span class="truncate font-semibold">{{ auth()->user()->name }}</span>
-                                    <span class="truncate text-xs">{{ auth()->user()->email }}</span>
+                                    <span class="truncate text-xs">{{ '@'.auth()->user()->username }}</span>
                                 </div>
                             </div>
                         </div>
@@ -67,7 +70,7 @@
                     <flux:menu.separator />
 
                     <flux:menu.radio.group>
-                        <flux:menu.item href="{{ route('settings.profile') }}" icon="cog" wire:navigate title="{{ __('Abrir la configuración del perfil') }}">{{ __('Settings') }}</flux:menu.item>
+                        <flux:menu.item href="{{ route('settings.profile') }}" icon="cog" wire:navigate title="{{ __('Abrir la configuración del perfil') }}">{{ __('Configuración') }}</flux:menu.item>
                     </flux:menu.radio.group>
 
                     <flux:menu.separator />
@@ -75,7 +78,7 @@
                     <form method="POST" action="{{ route('logout') }}" class="w-full">
                         @csrf
                         <flux:menu.item as="button" type="submit" icon="arrow-right-start-on-rectangle" class="w-full" title="{{ __('Cerrar la sesión actual') }}">
-                            {{ __('Log Out') }}
+                        {{ __('Cerrar sesión') }}
                         </flux:menu.item>
                     </form>
                 </flux:menu>
@@ -84,14 +87,14 @@
 
         <!-- Menú móvil -->
         <flux:sidebar stashable sticky class="border-r border-brand-200 bg-white lg:hidden dark:border-brand-800 dark:bg-brand-950">
-            <flux:sidebar.toggle class="lg:hidden" icon="x-mark" aria-label="{{ __('Cerrar menu lateral') }}" title="{{ __('Cerrar menu lateral') }}" />
+            <flux:sidebar.toggle class="lg:hidden" icon="x-mark" aria-label="{{ __('Cerrar menú lateral') }}" title="{{ __('Cerrar menú lateral') }}" />
 
             <a href="{{ route('dashboard') }}" class="ml-1 min-w-0" wire:navigate title="{{ __('Abrir el panel de control') }}">
                 <x-app-logo />
             </a>
 
             <flux:navlist variant="outline">
-                <flux:navlist.group heading="{{ __('Administracion') }}">
+                <flux:navlist.group heading="{{ __('Administración') }}">
                     <flux:navlist.item icon="layout-grid" href="{{ route('dashboard') }}" :current="request()->routeIs('dashboard')" wire:navigate title="{{ __('Abrir el panel de control') }}">
                         {{ __('Panel') }}
                     </flux:navlist.item>
@@ -101,8 +104,11 @@
                     <flux:navlist.item icon="users" href="{{ route('customers.index') }}" :current="request()->routeIs('customers.*')" wire:navigate title="{{ __('Consultar y gestionar clientes') }}">
                         {{ __('Clientes') }}
                     </flux:navlist.item>
-                    <flux:navlist.item icon="book-open-text" href="{{ route('catalogs.index') }}" :current="request()->routeIs('catalogs.*')" wire:navigate title="{{ __('Consultar catalogos activos') }}">
-                        {{ __('Catalogos') }}
+                    <flux:navlist.item icon="book-open-text" href="{{ route('catalogs.index') }}" :current="request()->routeIs('catalogs.*')" wire:navigate title="{{ __('Consultar catálogos activos') }}">
+                        {{ __('Catálogos') }}
+                    </flux:navlist.item>
+                    <flux:navlist.item icon="clock" href="{{ route('history.index') }}" :current="request()->routeIs('history.*')" wire:navigate title="{{ __('Consultar pedidos entregados y archivados') }}">
+                        {{ __('Historial') }}
                     </flux:navlist.item>
                 </flux:navlist.group>
             </flux:navlist>
@@ -111,7 +117,7 @@
 
             <div class="border-t border-brand-200 px-2 py-4 dark:border-brand-800">
                 <p class="text-xs font-semibold uppercase tracking-[0.18em] text-brand-600 dark:text-brand-300">
-                    {{ __('Gestion interna') }}
+                    {{ __('Gestión interna') }}
                 </p>
                 <p class="mt-1 text-sm text-brand-700 dark:text-brand-200">
                     {{ __('Pedidos y recordatorios') }}

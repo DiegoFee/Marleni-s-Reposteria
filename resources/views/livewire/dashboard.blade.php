@@ -33,13 +33,27 @@ new class extends Component
     #[Computed]
     public function urgentOrders(): Collection
     {
-        return $this->ordersWithinWindow(0, 24, false);
+        $limit = now()->addHours(24);
+
+        return $this->pendingOrders->filter(
+            fn (Order $order): bool => $order->delivery_at->lessThan($limit),
+        );
     }
 
     #[Computed]
     public function upcomingOrders(): Collection
     {
         return $this->ordersWithinWindow(24, 48, true);
+    }
+
+    #[Computed]
+    public function futureOrders(): Collection
+    {
+        $from = now()->addHours(48);
+
+        return $this->pendingOrders->filter(
+            fn (Order $order): bool => $order->delivery_at->greaterThan($from),
+        );
     }
 
     #[Computed]
@@ -67,7 +81,7 @@ new class extends Component
     {
         return $order->capture_mode === CaptureMode::Custom
             ? (string) $order->cake_description
-            : (string) ($order->cakeCategory?->name ?? __('Categoria no disponible'));
+            : (string) ($order->cakeCategory?->name ?? __('Categoría no disponible'));
     }
 
     public function formatMoney(mixed $amount): string
@@ -118,7 +132,7 @@ new class extends Component
 
             <div class="flex items-center gap-2 self-start rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-brand-100 sm:self-end">
                 <span class="size-2 rounded-full bg-brand-300 shadow-[0_0_0_4px_rgba(243,199,196,0.15)]"></span>
-                {{ __('Gestion interna') }}
+                {{ __('Gestión interna') }}
             </div>
         </div>
     </section>
@@ -126,13 +140,13 @@ new class extends Component
     <header class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div class="flex flex-col gap-2">
             <p class="text-sm font-semibold uppercase tracking-[0.18em] text-brand-600 dark:text-brand-300">
-                {{ __('Administracion') }}
+                {{ __('Administración') }}
             </p>
             <h1 class="text-3xl font-semibold tracking-tight text-brand-950 dark:text-brand-50">
                 {{ __('Panel de control') }}
             </h1>
             <p class="max-w-2xl text-sm text-brand-700 dark:text-brand-200">
-                {{ __('Revisa lo que debes preparar y cobrar durante las proximas 48 horas.') }}
+                 {{ __('Revisa lo que debes preparar y cobrar durante las próximas 48 horas.') }}
             </p>
         </div>
 
@@ -141,7 +155,7 @@ new class extends Component
         </flux:button>
     </header>
 
-    <section class="grid gap-6 lg:grid-cols-2" aria-label="{{ __('Entregas proximas') }}">
+    <section class="grid gap-6 lg:grid-cols-3" aria-label="{{ __('Entregas próximas') }}">
         <article class="rounded-2xl border border-rose-200 bg-rose-50 p-6 shadow-sm dark:border-rose-900/70 dark:bg-rose-950/30">
             <div class="flex items-start justify-between gap-4">
                 <div class="flex flex-col gap-2">
@@ -149,10 +163,10 @@ new class extends Component
                         {{ __('Prioridad alta') }}
                     </p>
                     <h2 class="text-xl font-semibold text-rose-950 dark:text-rose-50" id="urgent-orders-heading">
-                        {{ __('Proximas 24 horas') }}
+                        {{ __('Vencidos y próximas 24 horas') }}
                     </h2>
                     <p class="text-sm text-rose-800 dark:text-rose-200">
-                        {{ __('Pedidos pendientes que requieren preparacion inmediata.') }}
+                        {{ __('Pedidos pendientes vencidos o que requieren preparación inmediata.') }}
                     </p>
                 </div>
                 <flux:badge color="red">{{ $this->urgentOrders->count() }}</flux:badge>
@@ -218,7 +232,7 @@ new class extends Component
                         {{ __('De 24 a 48 horas') }}
                     </h2>
                     <p class="text-sm text-amber-800 dark:text-amber-200">
-                        {{ __('Pedidos pendientes para organizar la preparacion siguiente.') }}
+                        {{ __('Pedidos pendientes para organizar la preparación siguiente.') }}
                     </p>
                 </div>
                 <flux:badge color="amber">{{ $this->upcomingOrders->count() }}</flux:badge>
@@ -262,6 +276,72 @@ new class extends Component
                                 <div>
                                     <dt class="text-amber-700 dark:text-amber-300">{{ __('Saldo') }}</dt>
                                     <dd class="mt-1 font-semibold text-amber-950 dark:text-amber-50">Q {{ $this->formatMoney($this->pendingBalance($order)) }}</dd>
+                                </div>
+                            </dl>
+
+                            <flux:button href="{{ route('orders.show', $order) }}" wire:navigate variant="ghost" size="sm" class="self-start" tooltip="{{ __('Abrir el detalle y el historial del pedido') }}">
+                                {{ __('Ver detalle') }}
+                            </flux:button>
+                        </article>
+                    @endforeach
+                </div>
+            @endif
+        </article>
+
+        <article class="rounded-2xl border border-orange-200 bg-orange-50 p-6 shadow-sm dark:border-orange-900/70 dark:bg-orange-950/30">
+            <div class="flex items-start justify-between gap-4">
+                <div class="flex flex-col gap-2">
+                    <p class="text-sm font-semibold uppercase tracking-[0.18em] text-orange-700 dark:text-orange-300">
+                        {{ __('Planificación futura') }}
+                    </p>
+                    <h2 class="text-xl font-semibold text-orange-950 dark:text-orange-50" id="future-orders-heading">
+                        {{ __('Pedidos próximos') }}
+                    </h2>
+                    <p class="text-sm text-orange-800 dark:text-orange-200">
+                        {{ __('Pedidos pendientes con entrega después de 48 horas.') }}
+                    </p>
+                </div>
+                <flux:badge color="orange">{{ $this->futureOrders->count() }}</flux:badge>
+            </div>
+
+            @if ($this->futureOrders->isEmpty())
+                <p class="mt-6 rounded-xl border border-dashed border-orange-300 p-5 text-sm text-orange-800 dark:border-orange-800 dark:text-orange-200">
+                    {{ __('No hay pedidos pendientes después de 48 horas.') }}
+                </p>
+            @else
+                <div class="mt-6 flex flex-col divide-y divide-orange-200 dark:divide-orange-900/70">
+                    @foreach ($this->futureOrders as $order)
+                        <article wire:key="future-order-{{ $order->id }}" class="flex flex-col gap-4 py-5 first:pt-0 last:pb-0">
+                            <div class="flex flex-col gap-2">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <a href="{{ route('orders.show', $order) }}" wire:navigate class="font-semibold text-accent hover:underline" title="{{ __('Abrir el detalle del pedido') }}">
+                                        {{ $order->order_number }}
+                                    </a>
+                                    <flux:badge color="amber">{{ __('Pendiente') }}</flux:badge>
+                                </div>
+                                <p class="text-sm font-medium text-orange-950 dark:text-orange-50">{{ $order->customer->full_name }}</p>
+                                <p class="text-sm text-orange-800 dark:text-orange-200">{{ $order->customer->phone }}</p>
+                                <p class="text-sm text-orange-800 dark:text-orange-200">{{ $this->cakeLabel($order) }}</p>
+                            </div>
+
+                            <dl class="grid grid-cols-2 gap-3 text-sm">
+                                <div>
+                                    <dt class="text-orange-700 dark:text-orange-300">{{ __('Entrega') }}</dt>
+                                    <dd class="mt-1 font-semibold text-orange-950 dark:text-orange-50">
+                                        <time datetime="{{ $order->delivery_at->toIso8601String() }}">{{ $this->formatDeliveryDate($order->delivery_at) }}</time>
+                                    </dd>
+                                </div>
+                                <div>
+                                    <dt class="text-orange-700 dark:text-orange-300">{{ __('Precio') }}</dt>
+                                    <dd class="mt-1 font-semibold text-orange-950 dark:text-orange-50">Q {{ $this->formatMoney($order->agreed_price) }}</dd>
+                                </div>
+                                <div>
+                                    <dt class="text-orange-700 dark:text-orange-300">{{ __('Total pagado') }}</dt>
+                                    <dd class="mt-1 font-semibold text-orange-950 dark:text-orange-50">Q {{ $this->formatMoney($this->registeredPaymentsTotal($order)) }}</dd>
+                                </div>
+                                <div>
+                                    <dt class="text-orange-700 dark:text-orange-300">{{ __('Saldo') }}</dt>
+                                    <dd class="mt-1 font-semibold text-orange-950 dark:text-orange-50">Q {{ $this->formatMoney($this->pendingBalance($order)) }}</dd>
                                 </div>
                             </dl>
 

@@ -18,8 +18,9 @@ test('authenticated users can visit the dashboard', function () {
     $this->get('/dashboard')
         ->assertOk()
         ->assertSee('Panel de control')
-        ->assertSee('Proximas 24 horas')
-        ->assertSee('De 24 a 48 horas');
+        ->assertSee('Vencidos y próximas 24 horas')
+        ->assertSee('De 24 a 48 horas')
+        ->assertSee('Pedidos próximos');
 });
 
 test('dashboard separates pending deliveries at the twenty-four and forty-eight hour boundaries', function () {
@@ -27,6 +28,11 @@ test('dashboard separates pending deliveries at the twenty-four and forty-eight 
 
     $user = User::factory()->create();
     $customer = Customer::factory()->create();
+    $overdueOrder = Order::factory()->for($customer)->for($user, 'createdBy')->create([
+        'order_number' => 'PED-VENCIDO',
+        'agreed_price' => '160.00',
+        'delivery_at' => now()->subHour(),
+    ]);
     $urgentOrder = Order::factory()->for($customer)->for($user, 'createdBy')->create([
         'order_number' => 'PED-URGENTE',
         'agreed_price' => '180.00',
@@ -41,6 +47,10 @@ test('dashboard separates pending deliveries at the twenty-four and forty-eight 
         'order_number' => 'PED-LIMITE-48',
         'delivery_at' => now()->addHours(48),
     ]);
+    $futureOrder = Order::factory()->for($customer)->for($user, 'createdBy')->create([
+        'order_number' => 'PED-FUTURO',
+        'delivery_at' => now()->addHours(49),
+    ]);
 
     $this->actingAs($user);
 
@@ -48,18 +58,23 @@ test('dashboard separates pending deliveries at the twenty-four and forty-eight 
     $urgentOrder->load('cakeCategory');
 
     $component
+        ->assertSeeHtml('wire:key="urgent-order-'.$overdueOrder->id.'"')
         ->assertSeeHtml('wire:key="urgent-order-'.$urgentOrder->id.'"')
         ->assertDontSeeHtml('wire:key="urgent-order-'.$boundaryOrder->id.'"')
         ->assertDontSeeHtml('wire:key="urgent-order-'.$lastWindowOrder->id.'"')
         ->assertSeeHtml('wire:key="upcoming-order-'.$boundaryOrder->id.'"')
         ->assertSeeHtml('wire:key="upcoming-order-'.$lastWindowOrder->id.'"')
+        ->assertSeeHtml('wire:key="future-order-'.$futureOrder->id.'"')
         ->assertDontSeeHtml('wire:key="upcoming-order-'.$urgentOrder->id.'"')
         ->assertSeeInOrder([
-            'Proximas 24 horas',
+            'Vencidos y próximas 24 horas',
+            $overdueOrder->order_number,
             $urgentOrder->order_number,
             'De 24 a 48 horas',
             $boundaryOrder->order_number,
             $lastWindowOrder->order_number,
+            'Pedidos próximos',
+            $futureOrder->order_number,
         ])
         ->assertSee($customer->full_name)
         ->assertSee($customer->phone)
@@ -115,5 +130,5 @@ test('dashboard calculates active balances and excludes closed orders', function
         ])
         ->assertDontSee($deliveredOrder->order_number)
         ->assertDontSee($cancelledOrder->order_number)
-        ->assertDontSee($paidOrder->order_number);
+        ->assertSee($paidOrder->order_number);
 });

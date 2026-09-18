@@ -10,21 +10,24 @@ class AdminUserSeeder extends Seeder
 {
     public function run(): void
     {
-        $email = config('admin.email');
+        $username = config('admin.username');
         $password = config('admin.password');
 
-        if (blank($email) || blank($password)) {
-            return;
+        if (blank($username) || blank($password)) {
+            throw new RuntimeException('Configura ADMIN_USERNAME y ADMIN_PASSWORD antes de ejecutar los seeders.');
         }
 
-        $admin = User::query()->updateOrCreate(
-            ['email' => $email],
-            [
-                'name' => config('admin.name', 'Administradora'),
-                'password' => Hash::make($password),
-            ],
-        );
+        $admin = User::query()->firstOrNew(['username' => $username]);
+        $admin->fill([
+            'name' => config('admin.name', 'Administradora'),
+            'password' => Hash::make($password),
+        ]);
 
-        $admin->forceFill(['email_verified_at' => now()])->save();
+        if (blank($admin->email)) {
+            $admin->email = $username.'@local.invalid';
+        }
+
+        $admin->save();
+
     }
 }

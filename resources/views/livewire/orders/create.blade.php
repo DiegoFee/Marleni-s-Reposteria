@@ -79,6 +79,14 @@ new class extends Component {
 
     public function updatedCustomerSearch(): void
     {
+        if ($this->customerId !== null) {
+            $selectedCustomer = Customer::query()->find($this->customerId);
+
+            if ($selectedCustomer === null || $this->customerLabel($selectedCustomer) !== $this->customerSearch) {
+                $this->customerId = null;
+            }
+        }
+
         $this->validateOnly('customerSearch');
         unset($this->customerOptions);
     }
@@ -122,8 +130,17 @@ new class extends Component {
         $this->newCustomerPhone = trim($this->newCustomerPhone);
 
         $validated = $this->validate([
-            'newCustomerName' => ['required', 'string', 'max:150'],
-            'newCustomerPhone' => ['required', 'string', 'max:25'],
+            'newCustomerName' => [
+                'required',
+                'string',
+                'max:100',
+                Rule::unique(Customer::class, 'full_name'),
+            ],
+            'newCustomerPhone' => [
+                'required',
+                'digits:8',
+                Rule::unique(Customer::class, 'phone'),
+            ],
         ]);
 
         $attributes = [
@@ -131,7 +148,7 @@ new class extends Component {
             'phone' => $validated['newCustomerPhone'],
         ];
 
-        $customer = Customer::query()->firstOrCreate($attributes);
+        $customer = Customer::query()->create($attributes);
 
         $this->newCustomerName = '';
         $this->newCustomerPhone = '';
@@ -172,7 +189,11 @@ new class extends Component {
         $isStandard = $this->captureMode === CaptureMode::Standard->value;
 
         return [
-            'customerId' => ['required', 'integer', Rule::exists('customers', 'id')],
+            'customerId' => [
+                'required',
+                'integer',
+                Rule::exists('customers', 'id')->where(fn (QueryBuilder $query) => $query->whereNull('deleted_at')),
+            ],
             'captureMode' => ['required', Rule::enum(CaptureMode::class)],
             'cakeCategoryId' => $isStandard
                 ? ['required', 'integer', Rule::exists('cake_categories', 'id')->where(fn (QueryBuilder $query) => $query->where('is_active', true))]
@@ -222,10 +243,11 @@ new class extends Component {
                     <div class="mt-5 flex flex-col gap-4">
                         <flux:input
                             wire:model.live.debounce.300ms="customerSearch"
-                            label="{{ __('Buscar por nombre o telefono') }}"
+                            label="{{ __('Buscar por nombre o teléfono') }}"
                             placeholder="{{ __('Escribe para buscar') }}"
                             type="search"
                             autocomplete="off"
+                            :readonly="$customerId !== null"
                         />
 
                         @if ($this->customerOptions->isNotEmpty())
@@ -262,8 +284,8 @@ new class extends Component {
 
                         @if ($showCustomerForm)
                             <div class="grid gap-4 rounded-xl border border-brand-200 bg-brand-50 p-4 dark:border-brand-700 dark:bg-brand-950/50 sm:grid-cols-2">
-                                <flux:input wire:model="newCustomerName" label="{{ __('Nombre completo') }}" name="newCustomerName" />
-                                <flux:input wire:model="newCustomerPhone" label="{{ __('Telefono') }}" name="newCustomerPhone" type="tel" />
+                                <flux:input wire:model="newCustomerName" label="{{ __('Nombre completo') }}" name="newCustomerName" maxlength="100" />
+                                <flux:input wire:model="newCustomerPhone" label="{{ __('Teléfono') }}" name="newCustomerPhone" type="tel" inputmode="numeric" maxlength="8" />
                                 <div class="flex flex-col gap-2 sm:col-span-2 sm:flex-row sm:justify-end">
                                     <flux:button wire:click="$set('showCustomerForm', false)" type="button" variant="ghost" tooltip="{{ __('Cerrar el formulario del cliente') }}">
                                         {{ __('Cancelar') }}
@@ -280,17 +302,17 @@ new class extends Component {
                 <section class="rounded-2xl border border-brand-200 bg-white p-6 shadow-sm dark:border-brand-800 dark:bg-brand-900/50">
                     <div class="flex flex-col gap-2">
                         <h2 class="text-lg font-semibold text-brand-950 dark:text-brand-50">{{ __('Datos del pastel') }}</h2>
-                        <p class="text-sm text-brand-700 dark:text-brand-200">{{ __('Elige una opcion del catalogo o describe un pedido personalizado.') }}</p>
+                         <p class="text-sm text-brand-700 dark:text-brand-200">{{ __('Elige una opción del catálogo o describe un pedido personalizado.') }}</p>
                     </div>
 
                     <div class="mt-5 grid gap-4 md:grid-cols-2">
-                        <flux:select wire:model.live="captureMode" label="{{ __('Modalidad') }}" required>
-                            <flux:select.option value="standard">{{ __('Estandar') }}</flux:select.option>
+                            <flux:select wire:model.live="captureMode" label="{{ __('Modalidad') }}" required>
+                                <flux:select.option value="standard">{{ __('Estándar') }}</flux:select.option>
                             <flux:select.option value="custom">{{ __('Personalizado') }}</flux:select.option>
                         </flux:select>
 
                         @if ($captureMode === CaptureMode::Standard->value)
-                            <flux:select wire:model="cakeCategoryId" label="{{ __('Categoria') }}" placeholder="{{ __('Selecciona una categoria') }}" required>
+                                <flux:select wire:model="cakeCategoryId" label="{{ __('Categoría') }}" placeholder="{{ __('Selecciona una categoría') }}" required>
                                 @foreach ($this->activeCategories as $category)
                                     <flux:select.option value="{{ $category->id }}">{{ $category->name }}</flux:select.option>
                                 @endforeach
@@ -302,7 +324,7 @@ new class extends Component {
                                 @endforeach
                             </flux:select>
                         @else
-                            <flux:textarea wire:model="cakeDescription" label="{{ __('Descripcion del pastel') }}" placeholder="{{ __('Describe el diseno, sabor o detalles solicitados') }}" rows="4" class="md:col-span-2" required />
+                            <flux:textarea wire:model="cakeDescription" label="{{ __('Descripción del pastel') }}" placeholder="{{ __('Describe el diseño, sabor o detalles solicitados') }}" rows="4" class="md:col-span-2" required />
                         @endif
                     </div>
                 </section>
@@ -312,7 +334,7 @@ new class extends Component {
                 <section class="rounded-2xl border border-brand-200 bg-white p-6 shadow-sm dark:border-brand-800 dark:bg-brand-900/50">
                     <div class="flex flex-col gap-2">
                         <h2 class="text-lg font-semibold text-brand-950 dark:text-brand-50">{{ __('Condiciones del pedido') }}</h2>
-                        <p class="text-sm text-brand-700 dark:text-brand-200">{{ __('El precio pactado conserva el acuerdo aunque cambie el catalogo.') }}</p>
+                        <p class="text-sm text-brand-700 dark:text-brand-200">{{ __('El precio pactado conserva el acuerdo aunque cambie el catálogo.') }}</p>
                     </div>
 
                     <div class="mt-5 flex flex-col gap-4">
@@ -324,7 +346,7 @@ new class extends Component {
                 </section>
 
                 <section class="rounded-2xl border border-brand-200 bg-brand-50 p-6 dark:border-brand-800 dark:bg-brand-950/50">
-                    <p class="text-sm leading-6 text-brand-800 dark:text-brand-100">{{ __('Al guardar se creara el pedido con estado pendiente y se registrara su historial inicial.') }}</p>
+                    <p class="text-sm leading-6 text-brand-800 dark:text-brand-100">{{ __('Al guardar se creará el pedido con estado pendiente y se registrará su historial inicial.') }}</p>
                     <flux:button type="submit" variant="primary" class="mt-5 w-full" tooltip="{{ __('Guardar el pedido con la información indicada') }}">
                         {{ __('Guardar pedido') }}
                     </flux:button>

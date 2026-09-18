@@ -26,14 +26,14 @@
                         type="button"
                         x-on:click="hideSidebar"
                         class="hidden size-10 items-center justify-center rounded-xl text-brand-600 transition hover:bg-brand-100 hover:text-brand-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 lg:inline-flex dark:text-brand-300 dark:hover:bg-brand-800 dark:hover:text-brand-50"
-                        aria-label="{{ __('Ocultar menu lateral') }}"
-                        title="{{ __('Ocultar menu lateral') }}"
+                        aria-label="{{ __('Ocultar menú lateral') }}"
+                        title="{{ __('Ocultar menú lateral') }}"
                     >
                         <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M6 6l12 12M18 6 6 18" />
                         </svg>
                     </button>
-                    <flux:sidebar.toggle class="lg:hidden" icon="x-mark" aria-label="{{ __('Cerrar menu lateral') }}" title="{{ __('Cerrar menu lateral') }}" />
+                    <flux:sidebar.toggle class="lg:hidden" icon="x-mark" aria-label="{{ __('Cerrar menú lateral') }}" title="{{ __('Cerrar menú lateral') }}" />
                 </div>
             </div>
 
@@ -41,8 +41,8 @@
                 class="marleni-sidebar-resize-handle hidden lg:block"
                 role="separator"
                 aria-orientation="vertical"
-                aria-label="{{ __('Ajustar ancho del menu lateral') }}"
-                title="{{ __('Arrastra para ajustar el ancho del menu lateral') }}"
+                aria-label="{{ __('Ajustar ancho del menú lateral') }}"
+                title="{{ __('Arrastra para ajustar el ancho del menú lateral') }}"
                 tabindex="0"
                 :aria-valuemin="minimumWidth"
                 :aria-valuemax="maximumWidth"
@@ -56,11 +56,12 @@
             ></div>
 
             <flux:navlist variant="outline">
-                <flux:navlist.group heading="{{ __('Administracion') }}" class="grid">
+                <flux:navlist.group heading="{{ __('Administración') }}" class="grid">
                     <flux:navlist.item icon="home" :href="route('dashboard')" :current="request()->routeIs('dashboard')" wire:navigate title="{{ __('Abrir el panel de control') }}">{{ __('Panel') }}</flux:navlist.item>
                     <flux:navlist.item icon="folder-git-2" :href="route('orders.index')" :current="request()->routeIs('orders.*')" wire:navigate title="{{ __('Consultar y gestionar pedidos') }}">{{ __('Pedidos') }}</flux:navlist.item>
                     <flux:navlist.item icon="users" :href="route('customers.index')" :current="request()->routeIs('customers.*')" wire:navigate title="{{ __('Consultar y gestionar clientes') }}">{{ __('Clientes') }}</flux:navlist.item>
-                    <flux:navlist.item icon="book-open-text" :href="route('catalogs.index')" :current="request()->routeIs('catalogs.*')" wire:navigate title="{{ __('Consultar catalogos activos') }}">{{ __('Catalogos') }}</flux:navlist.item>
+                    <flux:navlist.item icon="book-open-text" :href="route('catalogs.index')" :current="request()->routeIs('catalogs.*')" wire:navigate title="{{ __('Consultar catálogos activos') }}">{{ __('Catálogos') }}</flux:navlist.item>
+                    <flux:navlist.item icon="clock" :href="route('history.index')" :current="request()->routeIs('history.*')" wire:navigate title="{{ __('Consultar pedidos entregados y archivados') }}">{{ __('Historial') }}</flux:navlist.item>
                 </flux:navlist.group>
             </flux:navlist>
 
@@ -68,7 +69,7 @@
 
             <div class="border-t border-brand-200 px-2 py-4 dark:border-brand-800">
                 <p class="text-xs font-semibold uppercase tracking-[0.18em] text-brand-600 dark:text-brand-300">
-                    {{ __('Gestion interna') }}
+                    {{ __('Gestión interna') }}
                 </p>
                 <p class="mt-1 text-sm text-brand-700 dark:text-brand-200">
                     {{ __('Pedidos y recordatorios') }}
@@ -98,7 +99,7 @@
 
                                 <div class="grid flex-1 text-left text-sm leading-tight">
                                     <span class="truncate font-semibold">{{ auth()->user()->name }}</span>
-                                    <span class="truncate text-xs">{{ auth()->user()->email }}</span>
+                                    <span class="truncate text-xs">{{ '@'.auth()->user()->username }}</span>
                                 </div>
                             </div>
                         </div>
@@ -107,7 +108,7 @@
                     <flux:menu.separator />
 
                     <flux:menu.radio.group>
-                        <flux:menu.item href="{{ route('settings.profile') }}" icon="cog" wire:navigate title="{{ __('Abrir la configuración del perfil') }}">{{ __('Settings') }}</flux:menu.item>
+                        <flux:menu.item href="{{ route('settings.profile') }}" icon="cog" wire:navigate title="{{ __('Abrir la configuración del perfil') }}">{{ __('Configuración') }}</flux:menu.item>
                     </flux:menu.radio.group>
 
                     <flux:menu.separator />
@@ -115,7 +116,7 @@
                     <form method="POST" action="{{ route('logout') }}" class="w-full">
                         @csrf
                         <flux:menu.item as="button" type="submit" icon="arrow-right-start-on-rectangle" class="w-full" title="{{ __('Cerrar la sesión actual') }}">
-                            {{ __('Log Out') }}
+                            {{ __('Cerrar sesión') }}
                         </flux:menu.item>
                     </form>
                 </flux:menu>
@@ -131,8 +132,8 @@
                 x-on:keydown.enter.prevent="showSidebar"
                 x-on:keydown.space.prevent="showSidebar"
                 class="pointer-events-auto inline-flex size-10 items-center justify-center rounded-e-2xl border border-s-0 border-brand-200 bg-white text-brand-700 shadow-lg shadow-brand-900/10 transition hover:w-12 hover:bg-brand-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:border-brand-800 dark:bg-brand-900 dark:text-brand-200 dark:hover:bg-brand-800"
-                aria-label="{{ __('Mostrar menu lateral') }}"
-                title="{{ __('Haz doble clic para mostrar el menu lateral') }}"
+                aria-label="{{ __('Mostrar menú lateral') }}"
+                title="{{ __('Haz doble clic para mostrar el menú lateral') }}"
             >
                 <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" d="m14 6-6 6 6 6M8 12h10" />
@@ -142,7 +143,7 @@
 
         <!-- Menú de usuario móvil -->
         <flux:header class="border-b border-brand-200 bg-white/95 shadow-sm backdrop-blur lg:hidden dark:border-brand-800 dark:bg-brand-950/95">
-            <flux:sidebar.toggle class="lg:hidden" icon="bars-2" inset="left" aria-label="{{ __('Abrir menu lateral') }}" title="{{ __('Abrir menu lateral') }}" />
+            <flux:sidebar.toggle class="lg:hidden" icon="bars-2" inset="left" aria-label="{{ __('Abrir menú lateral') }}" title="{{ __('Abrir menú lateral') }}" />
 
             <a href="{{ route('dashboard') }}" class="ml-2 min-w-0 max-w-[13rem]" wire:navigate title="{{ __('Abrir el panel de control') }}">
                 <x-app-logo />
@@ -173,7 +174,7 @@
 
                                 <div class="grid flex-1 text-left text-sm leading-tight">
                                     <span class="truncate font-semibold">{{ auth()->user()->name }}</span>
-                                    <span class="truncate text-xs">{{ auth()->user()->email }}</span>
+                                    <span class="truncate text-xs">{{ '@'.auth()->user()->username }}</span>
                                 </div>
                             </div>
                         </div>
@@ -182,7 +183,7 @@
                     <flux:menu.separator />
 
                     <flux:menu.radio.group>
-                        <flux:menu.item href="{{ route('settings.profile') }}" icon="cog" wire:navigate title="{{ __('Abrir la configuración del perfil') }}">{{ __('Settings') }}</flux:menu.item>
+                        <flux:menu.item href="{{ route('settings.profile') }}" icon="cog" wire:navigate title="{{ __('Abrir la configuración del perfil') }}">{{ __('Configuración') }}</flux:menu.item>
                     </flux:menu.radio.group>
 
                     <flux:menu.separator />
@@ -190,7 +191,7 @@
                     <form method="POST" action="{{ route('logout') }}" class="w-full">
                         @csrf
                         <flux:menu.item as="button" type="submit" icon="arrow-right-start-on-rectangle" class="w-full" title="{{ __('Cerrar la sesión actual') }}">
-                            {{ __('Log Out') }}
+                            {{ __('Cerrar sesión') }}
                         </flux:menu.item>
                     </form>
                 </flux:menu>

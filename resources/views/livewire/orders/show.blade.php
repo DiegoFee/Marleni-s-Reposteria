@@ -11,6 +11,7 @@ use App\Models\CakeCategory;
 use App\Models\Customer;
 use App\Models\Order;
 use App\Models\Payment;
+use App\Services\Orders\OrderDeletionService;
 use App\Services\Orders\OrderService;
 use App\Services\Payments\PaymentService;
 use Brick\Math\BigDecimal;
@@ -39,10 +40,37 @@ new class extends Component {
     public bool $showVoidForm = false;
     public ?int $voidingPaymentId = null;
     public string $voidReason = '';
+    public bool $showStatusConfirmation = false;
+    public ?string $pendingStatus = null;
+    public bool $showDeleteConfirmation = false;
 
     public function mount(Order $order): void
     {
         $this->loadOrder($order);
+    }
+
+    public function updatedShowVoidForm(bool $showVoidForm): void
+    {
+        if (! $showVoidForm) {
+            $this->voidingPaymentId = null;
+            $this->voidReason = '';
+            $this->resetValidation();
+        }
+    }
+
+    public function updatedShowStatusConfirmation(bool $showStatusConfirmation): void
+    {
+        if (! $showStatusConfirmation) {
+            $this->pendingStatus = null;
+            $this->resetValidation();
+        }
+    }
+
+    public function updatedShowDeleteConfirmation(bool $showDeleteConfirmation): void
+    {
+        if (! $showDeleteConfirmation) {
+            $this->resetValidation();
+        }
     }
 
     #[Computed]
@@ -96,6 +124,12 @@ new class extends Component {
 
     public function startEditing(): void
     {
+        if (! $this->canEdit()) {
+            $this->addError('status', 'Los pedidos entregados o cancelados ya no se pueden editar.');
+
+            return;
+        }
+
         $this->fillForm();
         $this->editing = true;
         $this->resetValidation();
@@ -103,9 +137,44 @@ new class extends Component {
 
     public function cancelEditing(): void
     {
-        $this->loadOrder($this->order->fresh());
+        $this->loadOrder($this->order);
         $this->editing = false;
         $this->resetValidation();
+    }
+
+    public function updatedStatus(string $status): void
+    {
+        if ($status === $this->order->status->value || ! $this->canEdit()) {
+            return;
+        }
+
+        if (! in_array($status, [OrderStatus::Delivered->value, OrderStatus::Cancelled->value], true)) {
+            return;
+        }
+
+        $this->pendingStatus = $status;
+        $this->status = $this->order->status->value;
+        $this->showStatusConfirmation = true;
+    }
+
+    public function confirmStatusChange(): void
+    {
+        if ($this->pendingStatus === null || ! in_array($this->pendingStatus, [OrderStatus::Delivered->value, OrderStatus::Cancelled->value], true)) {
+            $this->cancelStatusChange();
+
+            return;
+        }
+
+        $this->status = $this->pendingStatus;
+        $this->pendingStatus = null;
+        $this->showStatusConfirmation = false;
+    }
+
+    public function cancelStatusChange(): void
+    {
+        $this->status = $this->order->status->value;
+        $this->pendingStatus = null;
+        $this->showStatusConfirmation = false;
     }
 
     public function updatedCaptureMode(string $captureMode): void
@@ -137,6 +206,12 @@ new class extends Component {
 
     public function saveChanges(): void
     {
+        if (! $this->canEdit()) {
+            $this->addError('status', 'Los pedidos entregados o cancelados ya no se pueden editar.');
+
+            return;
+        }
+
         $this->cakeDescription = trim($this->cakeDescription);
         $this->agreedPrice = trim($this->agreedPrice);
         $this->deliveryAt = trim($this->deliveryAt);
@@ -160,8 +235,29 @@ new class extends Component {
         session()->flash('status', 'Pedido actualizado correctamente.');
     }
 
+    public function deleteOrder(OrderDeletionService $orderDeletionService): void
+    {
+        if ($this->order->trashed()) {
+            $this->addError('order', 'Este pedido ya está en el historial y solo se puede borrar desde allí.');
+
+            return;
+        }
+
+        $orderDeletionService->delete($this->order);
+
+        session()->flash('status', 'Pedido borrado correctamente.');
+
+        $this->redirect(route('orders.index'), navigate: true);
+    }
+
     public function savePayment(): void
     {
+        if (! $this->canEdit()) {
+            $this->addError('payment', 'Los pedidos entregados o cancelados ya no aceptan pagos.');
+
+            return;
+        }
+
         $this->paymentAmount = trim($this->paymentAmount);
         $this->paymentPaidAt = trim($this->paymentPaidAt);
         $this->paymentNotes = trim($this->paymentNotes);
@@ -190,6 +286,12 @@ new class extends Component {
 
     public function requestPaymentVoid(int $paymentId): void
     {
+        if (! $this->canEdit()) {
+            $this->addError('payment', 'Los pagos de pedidos entregados o cancelados ya no se pueden modificar.');
+
+            return;
+        }
+
         Payment::query()
             ->where('order_id', $this->order->getKey())
             ->whereKey($paymentId)
@@ -217,7 +319,7 @@ new class extends Component {
         $validated = $this->validate([
             'voidReason' => ['required', 'string', 'max:500'],
         ], [
-            'voidReason.required' => 'Indica el motivo de la anulacion.',
+            'voidReason.required' => 'Indica el motivo de la anulación.',
         ]);
 
         $payment = Payment::query()
@@ -235,7 +337,7 @@ new class extends Component {
     public function captureModeLabel(CaptureMode $captureMode): string
     {
         return match ($captureMode) {
-            CaptureMode::Standard => __('Estandar'),
+            CaptureMode::Standard => __('Estándar'),
             CaptureMode::Custom => __('Personalizado'),
         };
     }
@@ -258,6 +360,27 @@ new class extends Component {
         };
     }
 
+    public function orderFieldLabel(string $field): string
+    {
+        return match ($field) {
+            'customer_id' => __('Cliente'),
+            'capture_mode' => __('Modalidad'),
+            'cake_category_id' => __('Categoría'),
+            'base_price_id' => __('Precio base'),
+            'cake_description' => __('Descripción del pastel'),
+            'agreed_price' => __('Precio pactado'),
+            'delivery_at' => __('Fecha y hora de entrega'),
+            default => $field,
+        };
+    }
+
+    public function orderStatusLabel(string $status): string
+    {
+        $orderStatus = OrderStatus::tryFrom($status);
+
+        return $orderStatus === null ? $status : $this->statusLabel($orderStatus);
+    }
+
     public function eventLabel(ActivityEventType $eventType, ?ActivityLog $activityLog = null): string
     {
         return match ($eventType) {
@@ -276,9 +399,9 @@ new class extends Component {
     public function activitySummary(ActivityLog $activityLog): string
     {
         return match ($activityLog->event_type) {
-            ActivityEventType::OrderCreated => __('Se registro el pedido y su estado pendiente.'),
-            ActivityEventType::OrderUpdated => __('Campos actualizados: ').implode(', ', $activityLog->details['fields'] ?? []),
-            ActivityEventType::OrderStatusChanged => __('Cambio de ').($activityLog->details['from'] ?? '').__(' a ').($activityLog->details['to'] ?? ''),
+            ActivityEventType::OrderCreated => __('Se registró el pedido y su estado pendiente.'),
+            ActivityEventType::OrderUpdated => __('Campos actualizados: ').implode(', ', array_map(fn (string $field): string => $this->orderFieldLabel($field), $activityLog->details['fields'] ?? [])),
+            ActivityEventType::OrderStatusChanged => __('Cambio de ').$this->orderStatusLabel((string) ($activityLog->details['from'] ?? '')).__(' a ').$this->orderStatusLabel((string) ($activityLog->details['to'] ?? '')),
             ActivityEventType::PaymentRegistered => $this->paymentTypeActivitySummary($activityLog),
             ActivityEventType::PaymentVoided => __('Pago de Q ').($activityLog->details['amount'] ?? '0.00').' '.__('anulado: ').($activityLog->details['void_reason'] ?? ''),
             ActivityEventType::NotificationSent => __('Recordatorio confirmado.'),
@@ -291,7 +414,7 @@ new class extends Component {
         return match ($paymentType) {
             PaymentType::Deposit => __('Anticipo'),
             PaymentType::Partial => __('Abono'),
-            PaymentType::Settlement => __('Liquidacion'),
+            PaymentType::Settlement => __('Liquidación'),
         };
     }
 
@@ -340,7 +463,11 @@ new class extends Component {
         $isStandard = $this->captureMode === CaptureMode::Standard->value;
 
         return [
-            'customerId' => ['required', 'integer', Rule::exists('customers', 'id')],
+            'customerId' => [
+                'required',
+                'integer',
+                Rule::exists('customers', 'id')->where(fn (QueryBuilder $query) => $query->whereNull('deleted_at')),
+            ],
             'captureMode' => ['required', Rule::enum(CaptureMode::class)],
             'cakeCategoryId' => $isStandard
                 ? ['required', 'integer', Rule::exists('cake_categories', 'id')->where(fn (QueryBuilder $query) => $query->where('is_active', true))]
@@ -371,6 +498,7 @@ new class extends Component {
             ->withSum([
                 'payments as registered_payments_total' => fn (Builder $query): Builder => $query->where('status', PaymentStatus::Registered->value),
             ], 'amount')
+            ->withTrashed()
             ->findOrFail($order->getKey());
         $this->fillForm();
         $this->resetPaymentForm();
@@ -409,12 +537,16 @@ new class extends Component {
     {
         return is_numeric($amount) ? BigDecimal::of((string) $amount) : BigDecimal::of('0');
     }
+
+    public function canEdit(): bool
+    {
+        return ! $this->order->trashed() && $this->order->status === OrderStatus::Pending;
+    }
 }; ?>
 
 <div class="mx-auto flex w-full max-w-7xl flex-col gap-8">
         <header class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div class="flex flex-col gap-3">
-                <a href="{{ route('orders.index') }}" wire:navigate class="text-sm font-semibold text-accent hover:underline" title="{{ __('Volver al listado de pedidos') }}">← {{ __('Volver a pedidos') }}</a>
                 <div class="flex flex-col gap-2">
                     <p class="text-sm font-semibold uppercase tracking-[0.18em] text-brand-600 dark:text-brand-300">{{ __('Detalle del pedido') }}</p>
                     <div class="flex flex-wrap items-center gap-3">
@@ -425,11 +557,23 @@ new class extends Component {
                 </div>
             </div>
 
-            @if (! $editing)
-                <flux:button wire:click="startEditing" variant="primary" icon="pencil-square" tooltip="{{ __('Editar los datos y el estado del pedido') }}">
-                    {{ __('Editar pedido') }}
+            <div class="flex flex-wrap items-center gap-2 self-start sm:self-end">
+                <flux:button href="{{ route('orders.index') }}" wire:navigate variant="ghost" icon="arrow-left" tooltip="{{ __('Volver al listado de pedidos') }}">
+                    {{ __('Volver') }}
                 </flux:button>
-            @endif
+
+                @if (! $editing && $this->canEdit())
+                    <flux:button wire:click="startEditing" variant="primary" icon="pencil-square" tooltip="{{ __('Editar los datos y el estado del pedido') }}">
+                        {{ __('Editar pedido') }}
+                    </flux:button>
+                @endif
+
+                @if (! $order->trashed())
+                    <flux:button wire:click="$set('showDeleteConfirmation', true)" variant="danger" icon="trash" class="marleni-danger-button" tooltip="{{ __('Borrar este pedido, incluidos sus pagos registrados') }}">
+                        {{ __('Borrar pedido') }}
+                    </flux:button>
+                @endif
+            </div>
         </header>
 
         @if ($editing)
@@ -449,12 +593,12 @@ new class extends Component {
                             </flux:select>
 
                             <flux:select wire:model.live="captureMode" label="{{ __('Modalidad') }}" required>
-                                <flux:select.option value="standard">{{ __('Estandar') }}</flux:select.option>
+                                <flux:select.option value="standard">{{ __('Estándar') }}</flux:select.option>
                                 <flux:select.option value="custom">{{ __('Personalizado') }}</flux:select.option>
                             </flux:select>
 
                             @if ($captureMode === CaptureMode::Standard->value)
-                                <flux:select wire:model="cakeCategoryId" label="{{ __('Categoria') }}" placeholder="{{ __('Selecciona una categoria') }}" required>
+                                <flux:select wire:model="cakeCategoryId" label="{{ __('Categoría') }}" placeholder="{{ __('Selecciona una categoría') }}" required>
                                     @foreach ($this->activeCategories as $category)
                                         <flux:select.option value="{{ $category->id }}">{{ $category->name }}</flux:select.option>
                                     @endforeach
@@ -466,7 +610,7 @@ new class extends Component {
                                     @endforeach
                                 </flux:select>
                             @else
-                                <flux:textarea wire:model="cakeDescription" label="{{ __('Descripcion del pastel') }}" rows="4" class="md:col-span-2" required />
+                                <flux:textarea wire:model="cakeDescription" label="{{ __('Descripción del pastel') }}" rows="4" class="md:col-span-2" required />
                             @endif
                         </div>
                     </section>
@@ -482,7 +626,7 @@ new class extends Component {
                         <div class="mt-5 flex flex-col gap-4">
                             <flux:input wire:model="agreedPrice" label="{{ __('Precio pactado') }}" type="number" min="0.01" step="0.01" prefix="Q" required />
                             <flux:input wire:model="deliveryAt" label="{{ __('Fecha y hora de entrega') }}" type="datetime-local" required />
-                            <flux:select wire:model="status" label="{{ __('Estado') }}" required>
+                            <flux:select wire:model.live="status" label="{{ __('Estado') }}" required>
                                 <flux:select.option value="pending">{{ __('Pendiente') }}</flux:select.option>
                                 <flux:select.option value="delivered">{{ __('Entregado') }}</flux:select.option>
                                 <flux:select.option value="cancelled">{{ __('Cancelado') }}</flux:select.option>
@@ -554,7 +698,7 @@ new class extends Component {
                     </div>
 
                     @if ($order->payments->isEmpty())
-                        <p class="mt-6 text-sm text-brand-700 dark:text-brand-200">{{ __('Todavia no hay pagos registrados.') }}</p>
+                        <p class="mt-6 text-sm text-brand-700 dark:text-brand-200">{{ __('Todavía no hay pagos registrados.') }}</p>
                     @else
                         <div class="mt-6 flex flex-col divide-y divide-brand-100 dark:divide-brand-800">
                             @foreach ($order->payments as $payment)
@@ -581,7 +725,7 @@ new class extends Component {
 
                                     <div class="flex shrink-0 flex-col gap-3 sm:items-end">
                                         <p class="text-lg font-semibold text-brand-950 dark:text-brand-50">Q {{ $this->formatMoney($payment->amount) }}</p>
-                                        @if ($payment->status === PaymentStatus::Registered)
+                                        @if ($payment->status === PaymentStatus::Registered && $this->canEdit())
                                             <flux:button wire:click="requestPaymentVoid({{ $payment->id }})" variant="ghost" size="sm" tooltip="{{ __('Abrir la confirmación para anular este pago') }}">
                                                 {{ __('Anular pago') }}
                                             </flux:button>
@@ -593,52 +737,57 @@ new class extends Component {
                     @endif
                 </div>
 
-                <section class="h-fit rounded-2xl border border-brand-200 bg-brand-50 p-6 dark:border-brand-800 dark:bg-brand-950/50">
-                    <div class="flex flex-col gap-2">
-                        <h2 class="text-lg font-semibold text-brand-950 dark:text-brand-50">{{ __('Registrar pago') }}</h2>
-                        <p class="text-sm text-brand-700 dark:text-brand-200">{{ __('El sistema clasifica el pago segun el saldo disponible.') }}</p>
-                    </div>
+                @if ($this->canEdit())
+                    <section class="h-fit rounded-2xl border border-brand-200 bg-brand-50 p-6 dark:border-brand-800 dark:bg-brand-950/50">
+                        <div class="flex flex-col gap-2">
+                            <h2 class="text-lg font-semibold text-brand-950 dark:text-brand-50">{{ __('Registrar pago') }}</h2>
+                            <p class="text-sm text-brand-700 dark:text-brand-200">{{ __('El sistema clasifica el pago según el saldo disponible.') }}</p>
+                        </div>
 
-                    <form wire:submit="savePayment" class="mt-5 flex flex-col gap-4">
-                        <flux:input wire:model="paymentAmount" label="{{ __('Importe') }}" type="number" min="0.01" step="0.01" prefix="Q" required />
-                        <flux:input label="{{ __('Tipo de pago') }}" value="{{ $this->paymentTypeLabel($this->suggestedPaymentType) }}" readonly />
-                        <flux:input wire:model="paymentPaidAt" label="{{ __('Fecha del pago') }}" type="datetime-local" required />
-                        <flux:textarea wire:model="paymentNotes" label="{{ __('Nota opcional') }}" rows="3" />
-                        <flux:button type="submit" variant="primary" class="w-full" tooltip="{{ __('Registrar el pago y actualizar el saldo') }}">
-                            {{ __('Registrar pago') }}
-                        </flux:button>
-                    </form>
-                </section>
+                        <form wire:submit="savePayment" class="mt-5 flex flex-col gap-4">
+                            <flux:input wire:model="paymentAmount" label="{{ __('Importe') }}" type="number" min="0.01" step="0.01" prefix="Q" required />
+                            <flux:input label="{{ __('Tipo de pago') }}" value="{{ $this->paymentTypeLabel($this->suggestedPaymentType) }}" readonly />
+                            <flux:input wire:model="paymentPaidAt" label="{{ __('Fecha del pago') }}" type="datetime-local" required />
+                            <flux:textarea wire:model="paymentNotes" label="{{ __('Nota opcional') }}" rows="3" />
+                            <flux:button type="submit" variant="primary" class="w-full" tooltip="{{ __('Registrar el pago y actualizar el saldo') }}">
+                                {{ __('Registrar pago') }}
+                            </flux:button>
+                        </form>
+                    </section>
+                @endif
             </section>
 
-            <flux:modal wire:model="showVoidForm" focusable class="max-w-lg">
-                <form wire:submit="voidPayment" class="flex flex-col gap-6">
-                    <div>
-                        <flux:heading size="lg">{{ __('Confirmar anulacion') }}</flux:heading>
-                        <flux:subheading>{{ __('El pago se conservara en el historial y dejara de contar para el saldo. Indica el motivo para continuar.') }}</flux:subheading>
-                    </div>
+             <flux:modal wire:model="showVoidForm" focusable class="max-w-lg border border-brand-200 bg-brand-50 dark:border-brand-700 dark:bg-brand-950">
+                 <form wire:submit="voidPayment" class="flex flex-col gap-5 text-base">
+                     <div class="flex items-start gap-4">
+                         <div class="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-brand-800 text-xl font-bold text-white shadow-lg shadow-brand-900/20">!</div>
+                         <div>
+                             <flux:heading size="lg" class="font-display text-brand-950 dark:text-brand-50">{{ __('¿Anular pago?') }}</flux:heading>
+                             <p class="mt-2 text-base leading-6 text-brand-700 dark:text-brand-200">{{ __('Se conservará, pero dejará de contar para el saldo.') }}</p>
+                         </div>
+                     </div>
 
-                    <flux:textarea wire:model="voidReason" label="{{ __('Motivo de la anulacion') }}" rows="4" required />
+                    <flux:textarea wire:model="voidReason" label="{{ __('Motivo de la anulación') }}" rows="4" required />
 
                     <div class="flex flex-col gap-2 sm:flex-row sm:justify-end">
                         <flux:button wire:click="cancelPaymentVoid" type="button" variant="ghost" tooltip="{{ __('Cerrar sin anular el pago') }}">
                             {{ __('Cancelar') }}
                         </flux:button>
-                        <flux:button type="submit" variant="danger" tooltip="{{ __('Confirmar la anulación de este pago') }}">
-                            {{ __('Confirmar anulacion') }}
+                         <flux:button type="submit" variant="danger" class="marleni-danger-button" tooltip="{{ __('Confirmar la anulación de este pago') }}">
+                             {{ __('Anular pago') }}
                         </flux:button>
                     </div>
                 </form>
-            </flux:modal>
+             </flux:modal>
 
-            <section class="rounded-2xl border border-brand-200 bg-white p-6 shadow-sm dark:border-brand-800 dark:bg-brand-900/50">
+             <section class="rounded-2xl border border-brand-200 bg-white p-6 shadow-sm dark:border-brand-800 dark:bg-brand-900/50">
                 <div class="flex flex-col gap-2">
                     <h2 class="text-lg font-semibold text-brand-950 dark:text-brand-50">{{ __('Historial del pedido') }}</h2>
-                    <p class="text-sm text-brand-700 dark:text-brand-200">{{ __('La creacion y los cambios relevantes se registran con su responsable.') }}</p>
+                    <p class="text-sm text-brand-700 dark:text-brand-200">{{ __('La creación y los cambios relevantes se registran con su responsable.') }}</p>
                 </div>
 
                 @if ($this->activityLogs->isEmpty())
-                    <p class="mt-6 text-sm text-brand-700 dark:text-brand-200">{{ __('Todavia no hay eventos registrados.') }}</p>
+                    <p class="mt-6 text-sm text-brand-700 dark:text-brand-200">{{ __('Todavía no hay eventos registrados.') }}</p>
                 @else
                     <ol class="mt-6 flex flex-col divide-y divide-brand-100 dark:divide-brand-800">
                         @foreach ($this->activityLogs as $activityLog)
@@ -655,6 +804,53 @@ new class extends Component {
                         @endforeach
                     </ol>
                 @endif
-            </section>
+             </section>
+
         @endif
+
+             <flux:modal wire:model="showStatusConfirmation" focusable class="max-w-lg border border-brand-200 bg-brand-50 dark:border-brand-700 dark:bg-brand-950">
+                 <div class="flex flex-col gap-5 text-base">
+                     <div class="flex items-start gap-4">
+                         <div class="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-brand-800 text-xl font-bold text-white shadow-lg shadow-brand-900/20">!</div>
+                         <div>
+                             <flux:heading size="lg" class="font-display text-brand-950 dark:text-brand-50">{{ __('¿Confirmar estado?') }}</flux:heading>
+                             <p class="mt-2 text-base leading-6 text-brand-700 dark:text-brand-200">
+                                 {{ __('Pasará a') }}
+                                 <strong class="text-brand-950 dark:text-brand-50">{{ $this->pendingStatus === null ? '' : $this->statusLabel(OrderStatus::from($this->pendingStatus)) }}</strong>.
+                                 {{ __('Después no podrás editarlo.') }}
+                             </p>
+                         </div>
+                     </div>
+
+                    <div class="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                        <flux:button wire:click="cancelStatusChange" type="button" variant="ghost" tooltip="{{ __('Cancelar el cambio de estado') }}">
+                            {{ __('Cancelar') }}
+                        </flux:button>
+                        <flux:button wire:click="confirmStatusChange" type="button" variant="primary" tooltip="{{ __('Confirmar el cambio de estado') }}">
+                            {{ __('Confirmar cambio') }}
+                        </flux:button>
+                    </div>
+                </div>
+            </flux:modal>
+
+             <flux:modal wire:model="showDeleteConfirmation" focusable class="max-w-lg border border-brand-200 bg-brand-50 dark:border-brand-700 dark:bg-brand-950">
+                 <div class="flex flex-col gap-5 text-base">
+                     <div class="flex items-start gap-4">
+                         <div class="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-brand-800 text-xl font-bold text-white shadow-lg shadow-brand-900/20">!</div>
+                         <div>
+                             <flux:heading size="lg" class="font-display text-brand-950 dark:text-brand-50">{{ __('¿Borrar pedido?') }}</flux:heading>
+                             <p class="mt-2 text-base leading-6 text-brand-700 dark:text-brand-200">{{ __('Se ocultará de Pedidos. Sus datos se conservarán en el historial.') }}</p>
+                         </div>
+                     </div>
+
+                    <div class="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                        <flux:button wire:click="$set('showDeleteConfirmation', false)" type="button" variant="ghost" tooltip="{{ __('Cerrar sin borrar el pedido') }}">
+                            {{ __('Cancelar') }}
+                        </flux:button>
+                         <flux:button wire:click="deleteOrder" type="button" variant="danger" class="marleni-danger-button" tooltip="{{ __('Confirmar el borrado del pedido') }}">
+                             {{ __('Borrar') }}
+                        </flux:button>
+                    </div>
+                </div>
+            </flux:modal>
 </div>

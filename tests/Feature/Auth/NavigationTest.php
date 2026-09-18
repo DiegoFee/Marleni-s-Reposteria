@@ -10,6 +10,7 @@ test('guests are redirected to login from every internal route', function () {
         route('orders.create'),
         route('customers.index'),
         route('catalogs.index'),
+        route('history.index'),
         route('settings.profile'),
         route('settings.password'),
         route('settings.appearance'),
@@ -30,6 +31,7 @@ test('authenticated users can visit every navigation destination', function () {
         'orders.create',
         'customers.index',
         'catalogs.index',
+        'history.index',
         'settings.profile',
         'settings.password',
         'settings.appearance',
@@ -66,8 +68,10 @@ test('dashboard displays the administrative navigation labels', function () {
         ->assertSee('Pedidos')
         ->assertSee('Clientes')
         ->assertSee('Catálogos')
+        ->assertSee('Historial')
         ->assertSee(route('orders.index'), false)
         ->assertSee(route('customers.index'), false)
         ->assertSee(route('catalogs.index'), false)
+        ->assertSee(route('history.index'), false)
         ->assertSee(route('logout'), false);
 });

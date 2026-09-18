@@ -38,7 +38,7 @@ test('payments classify deposits partials and settlements while recalculating th
         ->assertSee('Historial de pagos')
         ->assertSee('Anticipo')
         ->assertSee('Abono')
-        ->assertSee('Liquidacion')
+        ->assertSee('Liquidación')
         ->assertSee('Saldo pendiente')
         ->assertSee('Q 0.00');
 

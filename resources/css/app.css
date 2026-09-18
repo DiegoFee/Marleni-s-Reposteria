@@ -104,6 +104,35 @@
         cursor: ew-resize !important;
         user-select: none !important;
     }
+
+    .marleni-danger-button {
+        border-color: var(--color-brand-800) !important;
+        background-color: var(--color-brand-800) !important;
+        color: var(--color-white) !important;
+        box-shadow: 0 8px 18px rgb(85 33 49 / 0.18);
+        transition: background-color 180ms ease, border-color 180ms ease, transform 180ms ease, box-shadow 180ms ease;
+    }
+
+    .marleni-danger-button:hover {
+        border-color: var(--color-brand-900) !important;
+        background-color: var(--color-brand-900) !important;
+        box-shadow: 0 10px 22px rgb(85 33 49 / 0.25);
+        transform: translateY(-1px);
+    }
+
+    .dark .marleni-danger-button {
+        border-color: var(--color-brand-700) !important;
+        background-color: var(--color-brand-700) !important;
+    }
+
+    .dark .marleni-danger-button:hover {
+        border-color: var(--color-brand-600) !important;
+        background-color: var(--color-brand-600) !important;
+    }
+}
+
+body.is-sidebar-resizing [data-marleni-sidebar] {
+    transition: none !important;
 }
 
 @media (min-width: 1024px) {

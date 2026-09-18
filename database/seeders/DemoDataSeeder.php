@@ -25,12 +25,12 @@ class DemoDataSeeder extends Seeder
         $admin = User::query()->oldest('id')->first();
 
         if ($admin === null) {
-            throw new RuntimeException('Crea primero la administradora con ADMIN_EMAIL y ADMIN_PASSWORD.');
+            throw new RuntimeException('Crea primero la administradora con ADMIN_USERNAME y ADMIN_PASSWORD.');
         }
 
         $customer = Customer::query()->firstOrCreate(
-            ['phone' => '5550000909'],
-            ['full_name' => 'Cliente de Demostracion Fase 9'],
+            ['phone' => '55500009'],
+            ['full_name' => 'Cliente de Demostración Fase 9'],
         );
 
         if (Order::query()->where('customer_id', $customer->getKey())->exists()) {

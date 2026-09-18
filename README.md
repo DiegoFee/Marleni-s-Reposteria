@@ -40,7 +40,7 @@ Aplicacion web interna para la administradora de Marleni's Reposteria. Permite g
    php artisan key:generate
    ```
 
-3. Crear una base de datos MariaDB vacia y completar en `.env` `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME` y `DB_PASSWORD`. Definir tambien `ADMIN_EMAIL` y `ADMIN_PASSWORD` fuera del repositorio.
+3. Crear una base de datos MariaDB vacia y completar en `.env` `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME` y `DB_PASSWORD`. Definir tambien `ADMIN_USERNAME` y `ADMIN_PASSWORD` fuera del repositorio.
 
 4. Ejecutar migraciones y catalogos:
 
@@ -75,7 +75,7 @@ php artisan view:cache
 chmod -R ug+rwX storage bootstrap/cache
 ```
 
-En el `.env` de produccion se deben definir `APP_ENV=production`, `APP_DEBUG=false`, `APP_URL`, las credenciales de MariaDB, `ADMIN_EMAIL`, `ADMIN_PASSWORD` y las variables del canal de recordatorios. Las credenciales no se escriben en el repositorio ni en la base de datos.
+En el `.env` de produccion se deben definir `APP_ENV=production`, `APP_DEBUG=false`, `APP_URL`, las credenciales de MariaDB, `ADMIN_USERNAME`, `ADMIN_PASSWORD` y las variables del canal de recordatorios. Las credenciales no se escriben en el repositorio ni en la base de datos.
 
 El canal de recordatorios permanece desactivado hasta confirmar proveedor y destinatario:
 

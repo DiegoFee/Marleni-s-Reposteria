@@ -15,7 +15,7 @@ use Livewire\Volt\Volt;
 
 test('the phase nine demo authenticates, shows the balance, and sends a simulated reminder', function () {
     config()->set([
-        'admin.email' => 'fase9-demo@example.test',
+        'admin.username' => 'fase9_demo',
         'admin.password' => 'fase9-demo-password',
         'services.notifications.enabled' => true,
         'services.notifications.channel' => 'telegram',
@@ -27,22 +27,22 @@ test('the phase nine demo authenticates, shows the balance, and sends a simulate
 
     $this->seed([CatalogSeeder::class, AdminUserSeeder::class, DemoDataSeeder::class]);
 
-    $admin = User::query()->where('email', 'fase9-demo@example.test')->firstOrFail();
-    $order = Order::query()->whereHas('customer', fn ($query) => $query->where('phone', '5550000909'))->firstOrFail();
+    $admin = User::query()->where('username', 'fase9_demo')->firstOrFail();
+    $order = Order::query()->whereHas('customer', fn ($query) => $query->where('phone', '55500009'))->firstOrFail();
 
     expect(number_format((float) Payment::query()->where('order_id', $order->getKey())->sum('amount'), 2, '.', ''))->toBe('125.00');
     expect($order->agreed_price)->toBe('225.00');
     expect(ActivityLog::query()->where('order_id', $order->getKey())->where('event_type', ActivityEventType::OrderCreated->value)->exists())->toBeTrue();
 
     Volt::test('auth.login')
-        ->set('email', $admin->email)
+        ->set('username', $admin->username)
         ->set('password', 'fase9-demo-password')
         ->call('login')
         ->assertHasNoErrors()
         ->assertRedirect(route('dashboard', absolute: false));
 
     $this->get(route('dashboard'))
-        ->assertSee('Cliente de Demostracion Fase 9')
+        ->assertSee('Cliente de Demostración Fase 9')
         ->assertSee('Q 100.00');
 
     Http::preventStrayRequests();

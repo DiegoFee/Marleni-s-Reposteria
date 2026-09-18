@@ -11,12 +11,13 @@ test('profile page is displayed', function () {
 
 test('profile information can be updated', function () {
     $user = User::factory()->create();
+    $originalUsername = $user->username;
+    $originalEmail = $user->email;
 
     $this->actingAs($user);
 
     $response = Volt::test('settings.profile')
         ->set('name', 'Test User')
-        ->set('email', 'test@example.com')
         ->call('updateProfileInformation');
 
     $response->assertHasNoErrors();
@@ -24,52 +25,31 @@ test('profile information can be updated', function () {
     $user->refresh();
 
     expect($user->name)->toEqual('Test User');
-    expect($user->email)->toEqual('test@example.com');
-    expect($user->email_verified_at)->toBeNull();
+    expect($user->username)->toEqual($originalUsername);
+    expect($user->email)->toEqual($originalEmail);
 });
 
-test('email verification status is unchanged when email address is unchanged', function () {
+test('profile does not expose email or account deletion controls', function () {
     $user = User::factory()->create();
 
-    $this->actingAs($user);
-
-    $response = Volt::test('settings.profile')
-        ->set('name', 'Test User')
-        ->set('email', $user->email)
-        ->call('updateProfileInformation');
-
-    $response->assertHasNoErrors();
-
-    expect($user->refresh()->email_verified_at)->not->toBeNull();
-});
-
-test('user can delete their account', function () {
-    $user = User::factory()->create();
-
-    $this->actingAs($user);
-
-    $response = Volt::test('settings.delete-user-form')
-        ->set('password', 'password')
-        ->call('deleteUser');
+    $response = $this->actingAs($user)->get('/settings/profile');
 
     $response
-        ->assertHasNoErrors()
-        ->assertRedirect('/');
-
-    expect($user->fresh())->toBeNull();
-    expect(auth()->check())->toBeFalse();
+        ->assertSee('Nombre de usuario')
+        ->assertDontSee('Correo electrónico')
+        ->assertDontSee('Eliminar cuenta');
 });
 
-test('correct password must be provided to delete account', function () {
+test('profile updates leave the user account intact', function () {
     $user = User::factory()->create();
 
     $this->actingAs($user);
 
-    $response = Volt::test('settings.delete-user-form')
-        ->set('password', 'wrong-password')
-        ->call('deleteUser');
+    Volt::test('settings.profile')
+        ->set('name', 'Updated User')
+        ->call('updateProfileInformation')
+        ->assertHasNoErrors();
 
-    $response->assertHasErrors(['password']);
-
-    expect($user->fresh())->not->toBeNull();
+    expect($user->fresh()->name)->toBe('Updated User');
+    expect(auth()->check())->toBeTrue();
 });

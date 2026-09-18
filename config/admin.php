@@ -2,6 +2,6 @@
 
 return [
     'name' => env('ADMIN_NAME', 'Administradora'),
-    'email' => env('ADMIN_EMAIL'),
+    'username' => env('ADMIN_USERNAME', 'admin'),
     'password' => env('ADMIN_PASSWORD'),
 ];
