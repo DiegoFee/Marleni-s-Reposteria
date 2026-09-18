@@ -7,7 +7,8 @@ use Illuminate\Console\Command;
 
 class SendOrderReminders extends Command
 {
-    protected $signature = 'orders:send-reminders';
+    protected $signature = 'orders:send-reminders
+                            {--retry-failed : Reintenta fallos despues de verificar que el proveedor no acepto el mensaje}';
 
     protected $description = 'Envia recordatorios de preparacion para pedidos proximos.';
 
@@ -19,9 +20,9 @@ class SendOrderReminders extends Command
             return self::SUCCESS;
         }
 
-        $sentCount = $reminderService->sendDueReminders();
+        $sentCount = $reminderService->sendDueReminders((bool) $this->option('retry-failed'));
 
-        $this->info("Recordatorios confirmados: {$sentCount}.");
+        $this->info("Notificaciones confirmadas: {$sentCount}.");
 
         return self::SUCCESS;
     }

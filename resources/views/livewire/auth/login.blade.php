@@ -81,7 +81,7 @@ new #[Layout('components.layouts.auth')] class extends Component {
 
     <form wire:submit="login" class="flex flex-col gap-6 rounded-3xl border border-brand-200/80 bg-white/75 p-6 text-base shadow-xl shadow-brand-900/5 backdrop-blur-sm sm:p-8 dark:border-brand-800 dark:bg-brand-900/55 dark:shadow-black/20">
         <!-- Nombre de usuario -->
-        <flux:input wire:model="username" label="{{ __('Nombre de usuario') }}" type="text" name="username" required autofocus autocomplete="username" placeholder="admin" class="text-base" />
+        <flux:input wire:model="username" label="{{ __('Nombre de usuario') }}" type="text" name="username" required autofocus autocomplete="username" placeholder="Usuario" class="text-base" />
 
         <!-- Contraseña -->
         <flux:input

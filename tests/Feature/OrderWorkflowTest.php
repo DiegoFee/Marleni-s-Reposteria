@@ -13,6 +13,8 @@ use App\Models\Payment;
 use App\Models\User;
 use App\Services\Payments\PaymentService;
 use Database\Seeders\CatalogSeeder;
+use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Http;
 use Livewire\Volt\Volt;
 
 function orderFormData(Customer $customer, CakeCategory $category, BasePrice $basePrice): array
@@ -26,6 +28,10 @@ function orderFormData(Customer $customer, CakeCategory $category, BasePrice $ba
         'deliveryAt' => now()->addDays(2)->format('Y-m-d H:i:s'),
     ];
 }
+
+beforeEach(function (): void {
+    config()->set('services.notifications.enabled', false);
+});
 
 test('standard orders preserve an overridden price and record their initial history', function () {
     $this->seed(CatalogSeeder::class);
@@ -59,6 +65,167 @@ test('standard orders preserve an overridden price and record their initial hist
     expect(Payment::query()->where('order_id', $order->id)->where('payment_type', PaymentType::Deposit->value)->where('status', PaymentStatus::Registered->value)->value('amount'))->toBe('50.00');
     expect(ActivityLog::query()->where('order_id', $order->id)->where('event_type', ActivityEventType::OrderCreated->value)->exists())->toBeTrue();
     expect(ActivityLog::query()->where('order_id', $order->id)->where('event_type', ActivityEventType::PaymentRegistered->value)->exists())->toBeTrue();
+});
+
+test('sends the order summary after registering a new order', function () {
+    $this->seed(CatalogSeeder::class);
+    $user = User::factory()->create();
+    $this->actingAs($user);
+    $customer = Customer::factory()->create();
+    $category = CakeCategory::query()->firstOrFail();
+    $basePrice = BasePrice::query()->firstOrFail();
+    config()->set([
+        'services.notifications.enabled' => true,
+        'services.notifications.channel' => 'telegram',
+        'services.notifications.telegram.chat_id' => 'order-summary-recipient',
+        'services.notifications.telegram.api_url' => 'https://api.telegram.test',
+        'services.notifications.telegram.bot_token' => 'order-summary-token',
+    ]);
+
+    Http::preventStrayRequests();
+    Http::fake([
+        'https://api.telegram.test/*' => Http::response([
+            'ok' => true,
+            'result' => ['message_id' => 7001],
+        ]),
+    ]);
+
+    Volt::test('orders.create')
+        ->set('customerId', $customer->id)
+        ->set('captureMode', CaptureMode::Standard->value)
+        ->set('cakeCategoryId', $category->id)
+        ->set('basePriceId', $basePrice->id)
+        ->set('agreedPrice', '180.00')
+        ->set('deliveryAt', now()->addDays(2)->format('Y-m-d H:i:s'))
+        ->set('depositAmount', '50.00')
+        ->call('save')
+        ->assertHasNoErrors();
+
+    $order = Order::query()->latest('id')->firstOrFail();
+    $notificationKey = 'telegram:'.$order->getKey().':order_created_summary';
+
+    Http::assertSent(fn (Request $request): bool => $request['chat_id'] === 'order-summary-recipient'
+        && str_contains($request['text'], '________________________________')
+        && str_contains($request['text'], 'NUEVO PEDIDO REGISTRADO')
+        && str_contains($request['text'], '- Pedido: '.$order->order_number)
+        && str_contains($request['text'], $customer->full_name)
+        && str_contains($request['text'], '- Teléfono: '.$customer->phone)
+        && str_contains($request['text'], '- Precio pactado: Q 180.00')
+        && str_contains($request['text'], '- Pagado: Q 50.00')
+        && str_contains($request['text'], '- Saldo pendiente: Q 130.00'));
+
+    $this->assertDatabaseHas('activity_logs', [
+        'order_id' => $order->getKey(),
+        'event_type' => ActivityEventType::NotificationSent->value,
+        'notification_channel' => 'telegram',
+        'reminder_window' => null,
+        'notification_key' => $notificationKey,
+        'provider_message_id' => '7001',
+    ]);
+    $sentNotification = ActivityLog::query()
+        ->where('order_id', $order->getKey())
+        ->where('event_type', ActivityEventType::NotificationSent->value)
+        ->firstOrFail();
+
+    expect($sentNotification->details)->toMatchArray([
+        'notification_type' => 'order_created_summary',
+    ]);
+
+    Volt::test('orders.show', ['order' => $order])
+        ->assertSee('Resumen del pedido enviado a la administradora.');
+});
+
+test('keeps a new order when the summary provider rejects the message', function () {
+    $user = User::factory()->create();
+    $this->actingAs($user);
+    $customer = Customer::factory()->create();
+    config()->set([
+        'services.notifications.enabled' => true,
+        'services.notifications.channel' => 'telegram',
+        'services.notifications.telegram.chat_id' => 'order-summary-recipient',
+        'services.notifications.telegram.api_url' => 'https://api.telegram.test',
+        'services.notifications.telegram.bot_token' => 'order-summary-token',
+    ]);
+
+    Http::preventStrayRequests();
+    Http::fake([
+        'https://api.telegram.test/*' => Http::response(['ok' => false], 400),
+    ]);
+
+    Volt::test('orders.create')
+        ->set('customerId', $customer->id)
+        ->set('captureMode', CaptureMode::Custom->value)
+        ->set('cakeDescription', 'Pastel de chocolate')
+        ->set('agreedPrice', '275.00')
+        ->set('deliveryAt', now()->addDays(3)->format('Y-m-d H:i:s'))
+        ->call('save')
+        ->assertHasNoErrors();
+
+    $order = Order::query()->latest('id')->firstOrFail();
+    $failure = ActivityLog::query()
+        ->where('order_id', $order->getKey())
+        ->where('event_type', ActivityEventType::NotificationFailed->value)
+        ->firstOrFail();
+
+    expect($failure->notification_key)->toBe('telegram:'.$order->getKey().':order_created_summary');
+    expect($failure->details)->toMatchArray([
+        'notification_type' => 'order_created_summary',
+        'failure_type' => 'provider_rejected',
+        'provider_status' => 400,
+    ]);
+    expect(Order::query()->count())->toBe(1);
+});
+
+test('retries a failed order summary only after an explicit operator request', function () {
+    $user = User::factory()->create();
+    $this->actingAs($user);
+    $customer = Customer::factory()->create();
+    $attempts = 0;
+    config()->set([
+        'services.notifications.enabled' => true,
+        'services.notifications.channel' => 'telegram',
+        'services.notifications.telegram.chat_id' => 'order-summary-recipient',
+        'services.notifications.telegram.api_url' => 'https://api.telegram.test',
+        'services.notifications.telegram.bot_token' => 'order-summary-token',
+    ]);
+
+    Http::preventStrayRequests();
+    Http::fake([
+        'https://api.telegram.test/*' => function () use (&$attempts) {
+            $attempts++;
+
+            return $attempts === 1
+                ? Http::response(['ok' => false], 400)
+                : Http::response(['ok' => true, 'result' => ['message_id' => 7002]]);
+        },
+    ]);
+
+    Volt::test('orders.create')
+        ->set('customerId', $customer->id)
+        ->set('captureMode', CaptureMode::Custom->value)
+        ->set('cakeDescription', 'Pastel de chocolate')
+        ->set('agreedPrice', '275.00')
+        ->set('deliveryAt', now()->addDays(3)->format('Y-m-d H:i:s'))
+        ->call('save')
+        ->assertHasNoErrors();
+
+    $order = Order::query()->latest('id')->firstOrFail();
+    expect($attempts)->toBe(1);
+
+    $this->travel(1)->hour();
+    $this->artisan('orders:send-reminders')->assertSuccessful();
+
+    Http::assertSentCount(1);
+
+    $this->artisan('orders:send-reminders --retry-failed')->assertSuccessful();
+
+    Http::assertSentCount(2);
+    $this->assertDatabaseHas('activity_logs', [
+        'order_id' => $order->getKey(),
+        'event_type' => ActivityEventType::NotificationSent->value,
+        'notification_key' => 'telegram:'.$order->getKey().':order_created_summary',
+        'provider_message_id' => '7002',
+    ]);
 });
 
 test('custom orders require a description and keep catalog references empty', function () {

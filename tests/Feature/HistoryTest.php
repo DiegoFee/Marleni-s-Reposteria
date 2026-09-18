@@ -26,6 +26,8 @@ test('history keeps a delivered order after it is deleted from orders', function
         ->assertSee('Historial de pagos')
         ->assertDontSee('Editar pedido');
 
+    $this->withSession(['auth.password_confirmed_at' => now()->timestamp]);
+
     Volt::test('history.index')
         ->assertSee($order->order_number)
         ->assertSee('Eliminado de Pedidos')
@@ -40,6 +42,10 @@ test('history keeps a delivered order after it is deleted from orders', function
     $this->assertDatabaseMissing('orders', ['id' => $order->id]);
     $this->assertDatabaseMissing('payments', ['id' => $payment->id]);
     $this->assertDatabaseMissing('activity_logs', ['id' => $activityLog->id]);
+    $this->assertDatabaseHas('order_deletion_audits', [
+        'order_number' => $order->order_number,
+        'actor_user_id' => $user->id,
+    ]);
 });
 
 test('history opens a delivered order detail without leaving the module', function () {
@@ -47,6 +53,7 @@ test('history opens a delivered order detail without leaving the module', functi
     $order = Order::factory()->delivered()->for($user, 'createdBy')->create();
     Payment::factory()->for($order)->for($user, 'registeredBy')->create();
     $this->actingAs($user);
+    $this->withSession(['auth.password_confirmed_at' => now()->timestamp]);
 
     Volt::test('history.index')
         ->assertSee($order->order_number)
@@ -75,8 +82,34 @@ test('history includes archived pending orders without exposing active pending o
         ->call('deleteOrder')
         ->assertRedirect(route('orders.index', absolute: false));
 
+    $this->withSession(['auth.password_confirmed_at' => now()->timestamp]);
+
     Volt::test('history.index')
         ->assertSee($archivedOrder->order_number)
         ->assertSee('Eliminado de Pedidos')
         ->assertDontSee($activeOrder->order_number);
+});
+
+test('history requires recent password confirmation before it can be opened', function () {
+    $user = User::factory()->create();
+    $this->actingAs($user);
+
+    $this->get(route('history.index'))
+        ->assertRedirect(route('password.confirm', absolute: false));
+});
+
+test('history cannot permanently delete an order without recent password confirmation', function () {
+    $user = User::factory()->create();
+    $order = Order::factory()->delivered()->for($user, 'createdBy')->create();
+    $this->actingAs($user);
+
+    Volt::test('history.index')
+        ->call('requestDelete', $order->id)
+        ->call('deleteOrder')
+        ->assertRedirect(route('password.confirm', absolute: false));
+
+    $this->assertModelExists($order);
+    $this->assertDatabaseMissing('order_deletion_audits', [
+        'order_number' => $order->order_number,
+    ]);
 });

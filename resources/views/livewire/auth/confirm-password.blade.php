@@ -1,6 +1,8 @@
 <?php
 
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
@@ -17,18 +19,44 @@ new #[Layout('components.layouts.auth')] class extends Component {
             'password' => ['required', 'string'],
         ]);
 
+        $this->ensureIsNotRateLimited();
+
         if (! Auth::guard('web')->validate([
             'username' => Auth::user()->username,
             'password' => $this->password,
         ])) {
+            RateLimiter::hit($this->throttleKey());
+
             throw ValidationException::withMessages([
                 'password' => __('auth.password'),
             ]);
         }
 
-        session(['auth.password_confirmed_at' => time()]);
+        RateLimiter::clear($this->throttleKey());
+        session()->passwordConfirmed();
 
         $this->redirectIntended(default: route('dashboard', absolute: false), navigate: true);
+    }
+
+    protected function ensureIsNotRateLimited(): void
+    {
+        if (! RateLimiter::tooManyAttempts($this->throttleKey(), 5)) {
+            return;
+        }
+
+        $seconds = RateLimiter::availableIn($this->throttleKey());
+
+        throw ValidationException::withMessages([
+            'password' => __('auth.throttle', [
+                'seconds' => $seconds,
+                'minutes' => ceil($seconds / 60),
+            ]),
+        ]);
+    }
+
+    protected function throttleKey(): string
+    {
+        return Str::transliterate(Str::lower((string) Auth::user()->username).'|'.request()->ip());
     }
 }; ?>
 
@@ -51,7 +79,6 @@ new #[Layout('components.layouts.auth')] class extends Component {
                 type="password"
                 name="password"
                 required
-                autocomplete="new-password"
                 autocomplete="current-password"
                 placeholder="{{ __('Contraseña') }}"
             />

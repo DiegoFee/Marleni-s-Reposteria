@@ -19,7 +19,7 @@ test('the phase nine demo authenticates, shows the balance, and sends a simulate
         'admin.password' => 'fase9-demo-password',
         'services.notifications.enabled' => true,
         'services.notifications.channel' => 'telegram',
-        'services.notifications.recipient' => 'demo-recipient',
+        'services.notifications.telegram.chat_id' => 'demo-recipient',
         'services.notifications.telegram.api_url' => 'https://api.telegram.test',
         'services.notifications.telegram.bot_token' => 'demo-token',
     ]);

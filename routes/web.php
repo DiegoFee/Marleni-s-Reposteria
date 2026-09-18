@@ -21,7 +21,9 @@ Route::middleware(['auth', 'auth.session'])->group(function () {
         'description' => 'Consulta las categorías y los precios base activos.',
     ])->name('catalogs.index');
 
-    Volt::route('historial', 'history.index')->name('history.index');
+    Volt::route('historial', 'history.index')
+        ->middleware('password.confirm')
+        ->name('history.index');
 
     Route::redirect('settings', 'settings/profile');
 

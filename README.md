@@ -77,12 +77,15 @@ chmod -R ug+rwX storage bootstrap/cache
 
 En el `.env` de produccion se deben definir `APP_ENV=production`, `APP_DEBUG=false`, `APP_URL`, las credenciales de MariaDB, `ADMIN_USERNAME`, `ADMIN_PASSWORD` y las variables del canal de recordatorios. Las credenciales no se escriben en el repositorio ni en la base de datos.
 
-El canal de recordatorios permanece desactivado hasta confirmar proveedor y destinatario:
+El canal de recordatorios usa Telegram inicialmente; completar las credenciales del servidor antes de ejecutar el scheduler:
 
 ```dotenv
-NOTIFICATION_ENABLED=false
+NOTIFICATIONS_ENABLED=true
 NOTIFICATION_CHANNEL=telegram
-NOTIFICATION_RECIPIENT=
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
+TELEGRAM_CONNECT_TIMEOUT=5
+TELEGRAM_TIMEOUT=10
 ```
 
 Al activar Telegram o WhatsApp, completar sus variables secretas mediante el gestor de secretos del servidor y luego ejecutar `php artisan config:cache`.
@@ -148,7 +151,7 @@ Crea un cliente ficticio, un pedido estandar con entrega dentro de 12 horas, un 
 - Abrir el detalle del pedido para registrar abonos. El sistema clasifica anticipo, abono o liquidacion y calcula el saldo con pagos registrados.
 - Revisar `Panel de control` para entregas proximas y saldos pendientes.
 - Marcar el pedido como entregado desde su detalle cuando finalice.
-- Para un recordatorio fallido, revisar el historial del pedido y `storage/logs/laravel.log`, corregir las variables del proveedor y ejecutar `php artisan orders:send-reminders` para reintentar. Los fallos quedan auditados y no confirman una notificacion hasta recibir una respuesta exitosa.
+- Para una notificacion fallida, revisar el historial del pedido y `storage/logs/laravel.log`, y corregir las variables del proveedor. Las respuestas `429` se reintentan automaticamente con backoff; las fallas de conexion o del servidor no se reenvian automaticamente porque los proveedores no ofrecen una garantia de idempotencia para estos mensajes. Despues de verificar que el proveedor no acepto el mensaje, ejecutar `php artisan orders:send-reminders --retry-failed`. Los fallos quedan auditados y no confirman una notificacion hasta recibir una respuesta exitosa.
 
 ## Verificacion de entrega
 

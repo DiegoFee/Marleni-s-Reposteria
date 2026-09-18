@@ -14,6 +14,7 @@ use App\Models\Customer;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\User;
+use App\Services\Notifications\ReminderService;
 use Brick\Math\BigDecimal;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -23,6 +24,8 @@ class OrderService
 {
     private const MAX_MONEY = '99999999.99';
 
+    public function __construct(private ReminderService $notificationService) {}
+
     /**
      * Crea un pedido, su anticipo inicial y la auditoria en una sola transaccion.
      *
@@ -30,7 +33,7 @@ class OrderService
      */
     public function create(array $data, User $actor): Order
     {
-        return DB::transaction(function () use ($data, $actor): Order {
+        $order = DB::transaction(function () use ($data, $actor): Order {
             $captureMode = $this->captureMode($data['capture_mode']);
             $agreedPrice = $this->money($data['agreed_price']);
             $depositAmount = $this->money($data['deposit_amount'] ?? '0');
@@ -93,6 +96,10 @@ class OrderService
 
             return $order->fresh(['customer', 'cakeCategory', 'basePrice', 'payments', 'activityLogs']);
         }, attempts: 3);
+
+        $this->notificationService->sendOrderCreatedSummary($order);
+
+        return $order;
     }
 
     /**

@@ -36,19 +36,22 @@ return [
     ],
 
     'notifications' => [
-        'enabled' => (bool) env('NOTIFICATION_ENABLED', false),
+        'enabled' => (bool) env('NOTIFICATIONS_ENABLED', false),
         'channel' => env('NOTIFICATION_CHANNEL', 'telegram'),
-        'recipient' => env('NOTIFICATION_RECIPIENT'),
-        'connect_timeout' => (int) env('NOTIFICATION_CONNECT_TIMEOUT', 3),
-        'timeout' => (int) env('NOTIFICATION_TIMEOUT', 10),
         'telegram' => [
             'api_url' => env('TELEGRAM_API_URL', 'https://api.telegram.org'),
             'bot_token' => env('TELEGRAM_BOT_TOKEN'),
+            'chat_id' => env('TELEGRAM_CHAT_ID'),
+            'connect_timeout' => (int) env('TELEGRAM_CONNECT_TIMEOUT', 5),
+            'timeout' => (int) env('TELEGRAM_TIMEOUT', 10),
         ],
         'whatsapp' => [
             'api_url' => env('WHATSAPP_API_URL', 'https://graph.facebook.com/v20.0'),
+            'recipient' => env('WHATSAPP_RECIPIENT'),
             'access_token' => env('WHATSAPP_ACCESS_TOKEN'),
             'phone_number_id' => env('WHATSAPP_PHONE_NUMBER_ID'),
+            'connect_timeout' => (int) env('WHATSAPP_CONNECT_TIMEOUT', 3),
+            'timeout' => (int) env('WHATSAPP_TIMEOUT', 10),
         ],
     ],
 

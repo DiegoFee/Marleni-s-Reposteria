@@ -20,7 +20,6 @@ final class WhatsAppNotificationChannel implements NotificationChannel
 
         $response = $this->client()
             ->withToken($accessToken)
-            ->withHeaders(['Idempotency-Key' => $notificationKey])
             ->post($phoneNumberId.'/messages', [
                 'messaging_product' => 'whatsapp',
                 'to' => $recipient,
@@ -36,13 +35,17 @@ final class WhatsAppNotificationChannel implements NotificationChannel
 
         $providerMessageId = data_get($response->json(), 'messages.0.id');
 
-        return new NotificationResult($providerMessageId === null ? null : (string) $providerMessageId);
+        if ($providerMessageId === null) {
+            throw new RuntimeException('WhatsApp devolvio una respuesta sin identificador de mensaje.');
+        }
+
+        return new NotificationResult((string) $providerMessageId);
     }
 
     private function client(): PendingRequest
     {
         return Http::baseUrl(rtrim((string) config('services.notifications.whatsapp.api_url'), '/'))
-            ->connectTimeout((int) config('services.notifications.connect_timeout'))
-            ->timeout((int) config('services.notifications.timeout'));
+            ->connectTimeout((int) config('services.notifications.whatsapp.connect_timeout'))
+            ->timeout((int) config('services.notifications.whatsapp.timeout'));
     }
 }

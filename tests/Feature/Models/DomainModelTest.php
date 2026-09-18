@@ -106,12 +106,22 @@ test('soft deleting a customer keeps its orders available for historical access'
     expect($order->refresh()->customer->is($customer->refresh()))->toBeTrue();
 });
 
-test('notification keys are unique when present', function () {
-    $notificationKey = 'order-1-48_hours';
-    ActivityLog::factory()->create(['notification_key' => $notificationKey]);
+test('notification failures can be retried before a confirmation is recorded', function () {
+    $order = Order::factory()->create();
+    $notificationKey = 'telegram:'.$order->getKey().':48_hours';
 
-    expect(fn () => ActivityLog::factory()->create(['notification_key' => $notificationKey]))
-        ->toThrow(QueryException::class);
+    ActivityLog::factory()->create([
+        'order_id' => $order->getKey(),
+        'event_type' => ActivityEventType::NotificationFailed,
+        'notification_key' => $notificationKey,
+    ]);
+    ActivityLog::factory()->create([
+        'order_id' => $order->getKey(),
+        'event_type' => ActivityEventType::NotificationSent,
+        'notification_key' => $notificationKey,
+    ]);
+
+    expect(ActivityLog::query()->where('notification_key', $notificationKey)->count())->toBe(2);
 });
 
 test('admin seeder uses configured credentials and hashes the password', function () {
@@ -127,4 +137,22 @@ test('admin seeder uses configured credentials and hashes the password', functio
 
     expect($admin->name)->toBe('Administradora de Prueba');
     expect(Hash::check('temporary-password', $admin->password))->toBeTrue();
+});
+
+test('admin seeder preserves an existing password when run again', function () {
+    config()->set([
+        'admin.name' => 'Administradora de Prueba',
+        'admin.username' => 'admin-prueba',
+        'admin.password' => 'temporary-password',
+    ]);
+
+    $this->seed(AdminUserSeeder::class);
+
+    config()->set('admin.password', 'replacement-password');
+    $this->seed(AdminUserSeeder::class);
+
+    $admin = User::query()->where('username', 'admin-prueba')->firstOrFail();
+
+    expect(Hash::check('temporary-password', $admin->password))->toBeTrue();
+    expect(Hash::check('replacement-password', $admin->password))->toBeFalse();
 });

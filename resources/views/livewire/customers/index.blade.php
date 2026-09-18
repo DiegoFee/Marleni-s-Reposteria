@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\OrderStatus;
+use App\Enums\PaymentStatus;
 use App\Models\Customer;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -127,7 +128,16 @@ new class extends Component {
     {
         $customer = Customer::query()->findOrFail($this->deletingCustomerId);
 
-        if ($customer->orders()->where('status', OrderStatus::Pending->value)->exists()) {
+        $hasPendingOrders = $customer->orders()
+            ->withTrashed()
+            ->where('status', OrderStatus::Pending->value)
+            ->exists();
+        $hasRegisteredPayments = $customer->orders()
+            ->withTrashed()
+            ->whereHas('payments', fn (Builder $query): Builder => $query->where('status', PaymentStatus::Registered->value))
+            ->exists();
+
+        if ($hasPendingOrders || $hasRegisteredPayments) {
             $this->cancelDelete();
             $this->addError('deleteCustomer', 'No se puede borrar el cliente porque tiene pedidos pendientes o pagos por resolver.');
 

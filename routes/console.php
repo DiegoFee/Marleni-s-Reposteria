@@ -10,6 +10,7 @@ Artisan::command('inspire', function () {
 
 Schedule::command('orders:send-reminders')
     ->everyMinute()
+    ->timezone((string) config('app.timezone'))
     ->withoutOverlapping();
 
 Schedule::command('app:backup-database')

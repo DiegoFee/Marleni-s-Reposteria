@@ -2,16 +2,19 @@
 
 use App\Enums\ActivityEventType;
 use App\Enums\CaptureMode;
+use App\Enums\NotificationMessageType;
 use App\Enums\OrderStatus;
 use App\Enums\PaymentStatus;
 use App\Enums\PaymentType;
 use App\Models\ActivityLog;
 use App\Models\Order;
+use App\Models\User;
 use App\Services\Orders\OrderDeletionService;
 use Brick\Math\BigDecimal;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Validate;
 use Livewire\Volt\Component;
@@ -130,10 +133,20 @@ new class extends Component {
 
     public function deleteOrder(OrderDeletionService $orderDeletionService): void
     {
+        if (! $this->ensurePasswordConfirmation()) {
+            return;
+        }
+
         $order = $this->historyOrdersQuery()
             ->findOrFail($this->deletingOrderId);
 
-        $orderDeletionService->forceDelete($order);
+        $actor = Auth::user();
+
+        if (! $actor instanceof User) {
+            abort(403);
+        }
+
+        $orderDeletionService->forceDelete($order, $actor);
         $this->cancelDelete();
         unset($this->orders);
         session()->flash('status', 'Pedido eliminado definitivamente del historial.');
@@ -201,8 +214,12 @@ new class extends Component {
                 ? __('Anticipo registrado')
                 : __('Pago registrado'),
             ActivityEventType::PaymentVoided => __('Pago anulado'),
-            ActivityEventType::NotificationSent => __('Recordatorio enviado'),
-            ActivityEventType::NotificationFailed => __('Recordatorio fallido'),
+            ActivityEventType::NotificationSent => ($activityLog?->details['notification_type'] ?? null) === NotificationMessageType::OrderCreatedSummary->value
+                ? __('Resumen del pedido enviado')
+                : __('Recordatorio enviado'),
+            ActivityEventType::NotificationFailed => ($activityLog?->details['notification_type'] ?? null) === NotificationMessageType::OrderCreatedSummary->value
+                ? __('Resumen del pedido fallido')
+                : __('Recordatorio fallido'),
         };
     }
 
@@ -214,8 +231,12 @@ new class extends Component {
             ActivityEventType::OrderStatusChanged => __('Cambio de ').$this->orderStatusLabel((string) ($activityLog->details['from'] ?? '')).__(' a ').$this->orderStatusLabel((string) ($activityLog->details['to'] ?? '')),
             ActivityEventType::PaymentRegistered => $this->paymentTypeActivitySummary($activityLog),
             ActivityEventType::PaymentVoided => __('Pago de Q ').($activityLog->details['amount'] ?? '0.00').' '.__('anulado: ').($activityLog->details['void_reason'] ?? ''),
-            ActivityEventType::NotificationSent => __('Recordatorio confirmado.'),
-            ActivityEventType::NotificationFailed => __('No se pudo enviar el recordatorio.'),
+            ActivityEventType::NotificationSent => ($activityLog->details['notification_type'] ?? null) === NotificationMessageType::OrderCreatedSummary->value
+                ? __('Resumen del pedido enviado a la administradora.')
+                : __('Recordatorio confirmado.'),
+            ActivityEventType::NotificationFailed => ($activityLog->details['notification_type'] ?? null) === NotificationMessageType::OrderCreatedSummary->value
+                ? __('No se pudo enviar el resumen del pedido.')
+                : __('No se pudo enviar el recordatorio.'),
         };
     }
 
@@ -296,6 +317,20 @@ new class extends Component {
                     ->where('status', OrderStatus::Delivered->value)
                     ->orWhereNotNull('orders.deleted_at');
             });
+    }
+
+    private function ensurePasswordConfirmation(): bool
+    {
+        $confirmedAt = (int) session('auth.password_confirmed_at', 0);
+
+        if ($confirmedAt > 0 && now()->timestamp - $confirmedAt <= (int) config('auth.password_timeout')) {
+            return true;
+        }
+
+        session()->put('url.intended', route('history.index', absolute: false));
+        $this->redirect(route('password.confirm', absolute: false), navigate: true);
+
+        return false;
     }
 }; ?>
 

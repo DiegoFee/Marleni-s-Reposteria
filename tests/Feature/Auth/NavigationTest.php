@@ -24,6 +24,7 @@ test('guests are redirected to login from every internal route', function () {
 
 test('authenticated users can visit every navigation destination', function () {
     $this->actingAs(User::factory()->create());
+    $this->withSession(['auth.password_confirmed_at' => now()->timestamp]);
 
     $navigationRoutes = [
         'dashboard',
