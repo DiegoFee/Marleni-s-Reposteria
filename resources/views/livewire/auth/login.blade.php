@@ -14,7 +14,7 @@ new #[Layout('components.layouts.auth')] class extends Component {
     #[Validate('required|string|max:60|alpha_dash')]
     public string $username = '';
 
-    #[Validate('required|string')]
+    #[Validate('required|string|max:255')]
     public string $password = '';
 
     public bool $remember = false;
@@ -35,6 +35,7 @@ new #[Layout('components.layouts.auth')] class extends Component {
 
         if (! Auth::attempt(['username' => $this->username, 'password' => $this->password], $this->remember)) {
             RateLimiter::hit($this->throttleKey());
+            RateLimiter::hit($this->ipThrottleKey());
 
             throw ValidationException::withMessages([
                 'username' => __('auth.failed'),
@@ -56,13 +57,19 @@ new #[Layout('components.layouts.auth')] class extends Component {
      */
     protected function ensureIsNotRateLimited(): void
     {
-        if (! RateLimiter::tooManyAttempts($this->throttleKey(), 5)) {
+        $throttleKey = $this->throttleKey();
+        $ipThrottleKey = $this->ipThrottleKey();
+
+        if (! RateLimiter::tooManyAttempts($throttleKey, 5)
+            && ! RateLimiter::tooManyAttempts($ipThrottleKey, 15)) {
             return;
         }
 
         event(new Lockout(request()));
 
-        $seconds = RateLimiter::availableIn($this->throttleKey());
+        $seconds = RateLimiter::availableIn(
+            RateLimiter::tooManyAttempts($throttleKey, 5) ? $throttleKey : $ipThrottleKey,
+        );
 
         throw ValidationException::withMessages([
             'username' => __('auth.throttle', [
@@ -82,6 +89,11 @@ new #[Layout('components.layouts.auth')] class extends Component {
     protected function throttleKey(): string
     {
         return Str::transliterate(Str::lower($this->username).'|'.request()->ip());
+    }
+
+    protected function ipThrottleKey(): string
+    {
+        return 'login-ip|'.request()->ip();
     }
 }; ?>
 

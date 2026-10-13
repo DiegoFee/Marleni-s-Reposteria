@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
+use App\Rules\BcryptPasswordLength;
 use Livewire\Volt\Component;
 
 new class extends Component {
@@ -22,8 +23,8 @@ new class extends Component {
     {
         try {
             $validated = $this->validate([
-                'current_password' => ['required', 'string', 'current_password'],
-                'password' => ['required', 'string', Password::defaults(), 'confirmed'],
+                'current_password' => ['required', 'string', 'max:255', 'current_password'],
+                'password' => ['required', 'string', 'max:255', new BcryptPasswordLength, Password::defaults(), 'confirmed'],
             ]);
         } catch (ValidationException $e) {
             $this->reset('current_password', 'password', 'password_confirmation');

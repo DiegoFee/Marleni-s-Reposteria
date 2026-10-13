@@ -32,3 +32,45 @@ test('assistant provisioning rejects a mismatched password without creating a us
 
     $this->assertDatabaseMissing('users', ['username' => 'asistente-invalida']);
 });
+
+test('assistant provisioning rejects an oversized password without creating a user', function () {
+    $password = str_repeat('a', 256);
+
+    $this->artisan('users:provision-assistant', [
+        'username' => 'asistente-password-largo',
+        'name' => 'Asistente Nueva',
+    ])
+        ->expectsQuestion('Contraseña para la cuenta Asistente', $password)
+        ->expectsQuestion('Confirma la contraseña', $password)
+        ->assertFailed();
+
+    $this->assertDatabaseMissing('users', ['username' => 'asistente-password-largo']);
+});
+
+test('assistant provisioning rejects a password longer than bcrypt byte limit', function () {
+    $password = str_repeat('ñ', 37);
+
+    $this->artisan('users:provision-assistant', [
+        'username' => 'asistente-bytes-largos',
+        'name' => 'Asistente Nueva',
+    ])
+        ->expectsQuestion('Contraseña para la cuenta Asistente', $password)
+        ->expectsQuestion('Confirma la contraseña', $password)
+        ->assertFailed();
+
+    $this->assertDatabaseMissing('users', ['username' => 'asistente-bytes-largos']);
+});
+
+test('assistant provisioning requires passwords of at least twelve characters', function () {
+    $password = 'short-pass';
+
+    $this->artisan('users:provision-assistant', [
+        'username' => 'asistente-clave-corta',
+        'name' => 'Asistente Nueva',
+    ])
+        ->expectsQuestion('Contraseña para la cuenta Asistente', $password)
+        ->expectsQuestion('Confirma la contraseña', $password)
+        ->assertFailed();
+
+    $this->assertDatabaseMissing('users', ['username' => 'asistente-clave-corta']);
+});

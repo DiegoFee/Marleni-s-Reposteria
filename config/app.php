@@ -39,7 +39,8 @@ return [
     |
     */
 
-    'debug' => (bool) env('APP_DEBUG', false),
+    'debug' => in_array(env('APP_ENV', 'production'), ['local', 'testing'], true)
+        && (bool) env('APP_DEBUG', false),
 
     /*
     |--------------------------------------------------------------------------
@@ -53,6 +54,11 @@ return [
     */
 
     'url' => env('APP_URL', 'http://localhost'),
+
+    'trusted_proxies' => array_values(array_filter(array_map(
+        'trim',
+        explode(',', env('TRUSTED_PROXIES', '')),
+    ))),
 
     /*
     |--------------------------------------------------------------------------

@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Enums\UserRole;
 use App\Models\User;
+use App\Rules\BcryptPasswordLength;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -47,7 +48,7 @@ class ProvisionAssistant extends Command
             'password' => $password,
             'password_confirmation' => $passwordConfirmation,
         ], [
-            'password' => ['required', 'string', Password::defaults(), 'confirmed'],
+            'password' => ['required', 'string', 'max:255', new BcryptPasswordLength, Password::defaults(), 'confirmed'],
         ]);
 
         if ($passwordValidator->fails()) {

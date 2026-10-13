@@ -20,7 +20,7 @@ new #[Layout('components.layouts.auth')] class extends Component {
     public function confirmPassword(): void
     {
         $this->validate([
-            'password' => ['required', 'string'],
+            'password' => ['required', 'string', 'max:255'],
         ]);
 
         $this->ensureIsNotRateLimited();

@@ -38,6 +38,16 @@ test('password is not confirmed with invalid password', function () {
     $response->assertHasErrors(['password']);
 });
 
+test('password confirmation rejects oversized input', function () {
+    $user = User::factory()->create();
+    $this->actingAs($user);
+
+    Volt::test('auth.confirm-password')
+        ->set('password', str_repeat('a', 256))
+        ->call('confirmPassword')
+        ->assertHasErrors('password');
+});
+
 test('password confirmation is rate limited after repeated failures', function () {
     $user = User::factory()->create();
     $this->actingAs($user);

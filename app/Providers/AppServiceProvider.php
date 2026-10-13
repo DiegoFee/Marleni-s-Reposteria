@@ -12,8 +12,10 @@ use App\Policies\CustomerPolicy;
 use App\Policies\OrderPolicy;
 use App\Services\Notifications\TelegramReminderChannel;
 use App\Services\Notifications\WhatsAppNotificationChannel;
+use Illuminate\Http\Middleware\TrustProxies;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Validation\Rules\Password;
 use RuntimeException;
 
 class AppServiceProvider extends ServiceProvider
@@ -42,6 +44,14 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Password::defaults(fn (): Password => Password::min(12));
+
+        $trustedProxies = config('app.trusted_proxies', []);
+
+        if ($trustedProxies !== []) {
+            TrustProxies::at($trustedProxies);
+        }
+
         Gate::policy(Order::class, OrderPolicy::class);
         Gate::policy(Customer::class, CustomerPolicy::class);
 
