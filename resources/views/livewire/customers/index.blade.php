@@ -4,6 +4,7 @@ use App\Enums\OrderStatus;
 use App\Enums\PaymentStatus;
 use App\Livewire\Forms\CustomerContactForm;
 use App\Models\Customer;
+use App\Services\CustomerContactData;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Gate;
@@ -27,13 +28,16 @@ new class extends Component {
     public function customers(): LengthAwarePaginator
     {
         $search = mb_substr(trim($this->search), 0, 100);
+        $phoneSearch = CustomerContactData::phoneSearchTerm($search);
 
         return Customer::query()
-            ->when($search !== '', function (Builder $query) use ($search): void {
-                $query->where(function (Builder $query) use ($search): void {
-                    $query
-                        ->where('full_name', 'like', "%{$search}%")
-                        ->orWhere('phone', 'like', "%{$search}%");
+            ->when($search !== '', function (Builder $query) use ($search, $phoneSearch): void {
+                $query->where(function (Builder $query) use ($search, $phoneSearch): void {
+                    $query->where('full_name', 'like', "%{$search}%");
+
+                    if ($phoneSearch !== null) {
+                        $query->orWhere('phone', 'like', "%{$phoneSearch}%");
+                    }
                 });
             })
             ->orderBy('full_name')
@@ -206,7 +210,7 @@ new class extends Component {
                                         <h2 class="break-words font-semibold text-brand-950 dark:text-brand-50">{{ $customer->full_name }}</h2>
                                         <p class="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm text-brand-700 dark:text-brand-200">
                                             <span class="text-xs font-semibold uppercase tracking-wide text-brand-600 dark:text-brand-300">{{ __('Teléfono') }}</span>
-                                            <span>{{ $customer->phone }}</span>
+                                             <span>{{ $customer->phoneFormatted() }}</span>
                                         </p>
                                     </div>
 
@@ -243,7 +247,7 @@ new class extends Component {
                                     @foreach ($this->customers as $customer)
                                         <tr wire:key="customer-{{ $customer->id }}" class="align-middle">
                                             <td class="px-5 py-4 font-medium text-brand-950 dark:text-brand-50">{{ $customer->full_name }}</td>
-                                            <td class="px-5 py-4 text-brand-700 dark:text-brand-200">{{ $customer->phone }}</td>
+                                             <td class="px-5 py-4 text-brand-700 dark:text-brand-200">{{ $customer->phoneFormatted() }}</td>
                                             <td class="px-5 py-4 text-right">
                                                 @canany(['update', 'delete'], $customer)
                                                     <div class="flex flex-wrap justify-end gap-2">
@@ -278,15 +282,23 @@ new class extends Component {
             @if ($showForm)
                 <section class="order-1 h-fit min-w-0 w-full max-w-full rounded-2xl border border-brand-200 bg-white p-6 shadow-sm dark:border-brand-800 dark:bg-brand-900/50 lg:order-2">
                     <div class="flex flex-col gap-2">
-                        <h2 class="text-lg font-semibold text-brand-950 dark:text-brand-50">
-                            {{ $editingCustomerId === null ? __('Nuevo cliente') : __('Editar cliente') }}
-                        </h2>
-                        <p class="text-sm text-brand-700 dark:text-brand-200">{{ __('Completa el nombre y teléfono de contacto.') }}</p>
-                    </div>
+                         <h2 class="text-lg font-semibold text-brand-950 dark:text-brand-50">
+                             {{ $editingCustomerId === null ? __('Nuevo cliente') : __('Editar cliente') }}
+                         </h2>
+                         <p class="text-sm text-brand-700 dark:text-brand-200">{{ __('Completa el nombre y teléfono de contacto.') }}</p>
+                         <p class="text-xs text-brand-600 dark:text-brand-300"><span aria-hidden="true">*</span> {{ __('Campo obligatorio') }}</p>
+                     </div>
 
-                    <form wire:submit="saveCustomer" class="mt-6 flex min-w-0 w-full flex-col gap-4">
-                        <flux:input wire:model="customerContact.fullName" label="{{ __('Nombre completo') }}" name="customerContact.fullName" maxlength="100" required autofocus class="min-w-0 w-full" />
-                        <flux:input wire:model="customerContact.phone" label="{{ __('Teléfono') }}" name="customerContact.phone" type="tel" inputmode="numeric" maxlength="8" required class="min-w-0 w-full" />
+                     <form wire:submit="saveCustomer" class="mt-6 flex min-w-0 w-full flex-col gap-4">
+                         <x-validation-errors :fields="['customerContact.fullName', 'customerContact.phone']" />
+                         <div>
+                             <flux:input wire:model="customerContact.fullName" label="{{ __('Nombre completo') }} *" name="customerContact.fullName" maxlength="100" :invalid="$errors->has('customerContact.fullName')" aria-invalid="{{ $errors->has('customerContact.fullName') ? 'true' : 'false' }}" required autofocus class="min-w-0 w-full" />
+                             <flux:error name="customerContact.fullName" />
+                         </div>
+                         <div x-data="customerPhoneInput" x-on:input="format($event)">
+                             <flux:input wire:model="customerContact.phone" label="{{ __('Teléfono') }} *" name="customerContact.phone" type="tel" inputmode="numeric" maxlength="9" description="{{ __('Ocho dígitos; el guion es solo de presentación.') }}" :invalid="$errors->has('customerContact.phone')" aria-invalid="{{ $errors->has('customerContact.phone') ? 'true' : 'false' }}" required class="min-w-0 w-full" />
+                             <flux:error name="customerContact.phone" />
+                         </div>
 
                         <div class="flex flex-col gap-2 sm:flex-row sm:justify-end">
                             <flux:button wire:click="cancelForm" type="button" variant="ghost" tooltip="{{ __('Cerrar el formulario sin guardar') }}">

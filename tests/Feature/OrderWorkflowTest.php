@@ -16,6 +16,7 @@ use App\Services\Orders\OrderService;
 use App\Services\Payments\PaymentService;
 use Database\Seeders\CatalogSeeder;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Validation\ValidationException;
 use Livewire\Volt\Volt;
@@ -84,9 +85,9 @@ test('order creation displays the localized required customer message', function
     expect(Order::query()->count())->toBe(0);
 });
 
-test('new orders reject delivery times that are not strictly in the future', function () {
+test('new orders reject delivery times in the past including an elapsed current minute', function () {
     $this->seed(CatalogSeeder::class);
-    $this->travelTo(now()->setTime(12, 0));
+    $this->travelTo(now()->setTime(12, 0, 30));
     $this->actingAs(User::factory()->owner()->create());
     $customer = Customer::factory()->create();
     $category = CakeCategory::query()->firstOrFail();
@@ -106,7 +107,7 @@ test('new orders reject delivery times that are not strictly in the future', fun
             ->set('deliveryAt', $deliveryAt)
             ->call('save')
             ->assertHasErrors('deliveryAt')
-            ->assertSee('La fecha y hora de entrega debe ser posterior al momento actual.');
+            ->assertSee('La fecha y hora de entrega no puede ser anterior al momento actual.');
     }
 
     expect(Order::query()->count())->toBe(0);
@@ -114,12 +115,12 @@ test('new orders reject delivery times that are not strictly in the future', fun
     expect(ActivityLog::query()->count())->toBe(0);
 });
 
-test('order service rejects a new delivery at the current moment', function () {
+test('order service accepts a new delivery at the exact current moment', function () {
     $this->travelTo(now()->setTime(12, 0));
     $actor = User::factory()->owner()->create();
     $customer = Customer::factory()->create();
 
-    expect(fn () => app(OrderService::class)->create([
+    $order = app(OrderService::class)->create([
         'customer_id' => $customer->getKey(),
         'capture_mode' => CaptureMode::Custom,
         'cake_category_id' => null,
@@ -128,11 +129,86 @@ test('order service rejects a new delivery at the current moment', function () {
         'agreed_price' => '275.00',
         'delivery_at' => now(),
         'deposit_amount' => '0',
-    ], $actor))->toThrow(ValidationException::class, 'La fecha y hora de entrega debe ser posterior al momento actual.');
+    ], $actor);
 
-    expect(Order::query()->count())->toBe(0);
+    expect($order->delivery_at->equalTo(now()))->toBeTrue();
+    $this->assertDatabaseCount('orders', 1);
     expect(Payment::query()->count())->toBe(0);
-    expect(ActivityLog::query()->count())->toBe(0);
+    $this->assertDatabaseHas('activity_logs', [
+        'order_id' => $order->getKey(),
+        'event_type' => ActivityEventType::OrderCreated->value,
+    ]);
+});
+
+test('order service stores date objects in the configured Guatemala timezone', function () {
+    $this->travelTo('2026-10-13 12:00:00');
+    $actor = User::factory()->owner()->create();
+    $customer = Customer::factory()->create();
+
+    $order = app(OrderService::class)->create([
+        'customer_id' => $customer->getKey(),
+        'capture_mode' => CaptureMode::Custom,
+        'cake_category_id' => null,
+        'base_price_id' => null,
+        'cake_description' => 'Pastel personalizado',
+        'agreed_price' => '275.00',
+        'delivery_at' => new DateTimeImmutable('2026-10-13T18:00:00+00:00'),
+        'deposit_amount' => '0',
+    ], $actor);
+
+    expect($order->delivery_at->format('Y-m-d H:i:s'))->toBe('2026-10-13 12:00:00');
+});
+
+test('order form accepts a delivery at the exact current moment', function () {
+    $this->seed(CatalogSeeder::class);
+    $this->travelTo(now()->setTime(12, 0));
+    $user = User::factory()->owner()->create();
+    $this->actingAs($user);
+    $customer = Customer::factory()->create();
+    $category = CakeCategory::query()->firstOrFail();
+    $basePrice = BasePrice::query()->firstOrFail();
+    $component = Volt::test('orders.create');
+
+    foreach (orderFormData($customer, $category, $basePrice) as $property => $value) {
+        $component->set($property, $value);
+    }
+
+    $component
+        ->set('deliveryAt', now()->format('Y-m-d\\TH:i'))
+        ->call('save')
+        ->assertHasNoErrors();
+
+    $this->assertDatabaseCount('orders', 1);
+    expect(Order::query()->firstOrFail()->delivery_at->equalTo(now()))->toBeTrue();
+});
+
+test('money inputs present two decimals on blur without rounding invalid precision', function () {
+    $this->actingAs(User::factory()->owner()->create());
+    $component = Volt::test('orders.create');
+
+    foreach ([
+        '0' => '0.00',
+        '85' => '85.00',
+        '1234.5' => '1234.50',
+        '1234.567' => '1234.567',
+    ] as $enteredAmount => $formattedAmount) {
+        $component
+            ->set('agreedPrice', $enteredAmount)
+            ->call('formatAgreedPrice')
+            ->assertSet('agreedPrice', $formattedAmount);
+    }
+
+    $component
+        ->set('depositAmount', '0')
+        ->call('formatDepositAmount')
+        ->assertSet('depositAmount', '0.00');
+
+    $order = Order::factory()->create();
+
+    Volt::test('orders.show', ['order' => $order])
+        ->set('paymentAmount', '1234.5')
+        ->call('formatPaymentAmount')
+        ->assertSet('paymentAmount', '1234.50');
 });
 
 test('saving an order persists its new customer and related records together', function () {
@@ -144,11 +220,8 @@ test('saving an order persists its new customer and related records together', f
 
     $component = Volt::test('orders.create')
         ->set('showCustomerForm', true)
-        ->set('customerContact.fullName', '  Cliente Nuevo  ')
-        ->set('customerContact.phone', ' 55551234 ')
-        ->call('selectNewCustomer')
-        ->assertHasNoErrors()
-        ->assertSet('newCustomerSelected', true);
+        ->set('customerContact.fullName', '  María   del Carmen Pérez  ')
+        ->set('customerContact.phone', ' 5361 - 6569 ');
 
     expect(Customer::query()->count())->toBe(0);
 
@@ -165,13 +238,81 @@ test('saving an order persists its new customer and related records together', f
     $customer = Customer::query()->firstOrFail();
     $order = Order::query()->firstOrFail();
 
-    expect($customer->full_name)->toBe('Cliente Nuevo');
-    expect($customer->phone)->toBe('55551234');
+    expect($customer->full_name)->toBe('María del Carmen Pérez');
+    expect($customer->phone)->toBe('53616569');
     expect($order->customer_id)->toBe($customer->getKey());
     expect($order->created_by)->toBe($user->getKey());
     expect(Payment::query()->where('order_id', $order->getKey())->where('payment_type', PaymentType::Deposit->value)->value('amount'))->toBe('50.00');
     expect(ActivityLog::query()->where('order_id', $order->getKey())->where('event_type', ActivityEventType::OrderCreated->value)->exists())->toBeTrue();
     expect(ActivityLog::query()->where('order_id', $order->getKey())->where('event_type', ActivityEventType::PaymentRegistered->value)->exists())->toBeTrue();
+});
+
+test('order service validates a new customer contact before creating related records', function () {
+    $this->seed(CatalogSeeder::class);
+    $user = User::factory()->owner()->create();
+    $category = CakeCategory::query()->firstOrFail();
+    $basePrice = BasePrice::query()->firstOrFail();
+
+    expect(fn () => app(OrderService::class)->create([
+        'customer_id' => null,
+        'capture_mode' => CaptureMode::Standard,
+        'cake_category_id' => $category->getKey(),
+        'base_price_id' => $basePrice->getKey(),
+        'cake_description' => null,
+        'agreed_price' => '180.00',
+        'delivery_at' => now()->addDays(2),
+        'deposit_amount' => '50.00',
+    ], $user, [
+        'full_name' => 'Juan',
+        'phone' => '5361a569',
+    ]))->toThrow(ValidationException::class);
+
+    $this->assertDatabaseCount('customers', 0);
+    $this->assertDatabaseCount('orders', 0);
+    $this->assertDatabaseCount('payments', 0);
+    $this->assertDatabaseCount('activity_logs', 0);
+});
+
+test('order creation rolls back when a customer contact becomes duplicate during the transaction', function () {
+    $this->seed(CatalogSeeder::class);
+    $user = User::factory()->owner()->create();
+    $category = CakeCategory::query()->firstOrFail();
+    $basePrice = BasePrice::query()->firstOrFail();
+    $duplicateInserted = false;
+
+    Customer::creating(function () use (&$duplicateInserted): void {
+        if ($duplicateInserted) {
+            return;
+        }
+
+        $duplicateInserted = true;
+
+        DB::table('customers')->insert([
+            'full_name' => 'Cliente de carrera',
+            'phone' => '55554321',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    });
+
+    expect(fn () => app(OrderService::class)->create([
+        'customer_id' => null,
+        'capture_mode' => CaptureMode::Standard,
+        'cake_category_id' => $category->getKey(),
+        'base_price_id' => $basePrice->getKey(),
+        'cake_description' => null,
+        'agreed_price' => '180.00',
+        'delivery_at' => now()->addDays(2),
+        'deposit_amount' => '50.00',
+    ], $user, [
+        'full_name' => 'Cliente nuevo',
+        'phone' => '55554321',
+    ]))->toThrow(ValidationException::class, 'El valor de teléfono ya está registrado.');
+
+    $this->assertDatabaseCount('customers', 0);
+    $this->assertDatabaseCount('orders', 0);
+    $this->assertDatabaseCount('payments', 0);
+    $this->assertDatabaseCount('activity_logs', 0);
 });
 
 test('a failed initial deposit insert rolls back its customer order and history', function () {
@@ -220,11 +361,18 @@ test('sends the order summary after registering a new order', function () {
     ]);
 
     Http::preventStrayRequests();
+    $outerTransactionLevel = DB::transactionLevel();
+    $summaryWasSentAfterCommit = false;
     Http::fake([
-        'https://api.telegram.test/*' => Http::response([
-            'ok' => true,
-            'result' => ['message_id' => 7001],
-        ]),
+        'https://api.telegram.test/*' => function (Request $request) use (&$summaryWasSentAfterCommit, $outerTransactionLevel) {
+            $summaryWasSentAfterCommit = DB::transactionLevel() === $outerTransactionLevel
+                && Order::query()->exists();
+
+            return Http::response([
+                'ok' => true,
+                'result' => ['message_id' => 7001],
+            ]);
+        },
     ]);
 
     Volt::test('orders.create')
@@ -237,6 +385,8 @@ test('sends the order summary after registering a new order', function () {
         ->set('depositAmount', '50.00')
         ->call('save')
         ->assertHasNoErrors();
+
+    expect($summaryWasSentAfterCommit)->toBeTrue();
 
     $order = Order::query()->latest('id')->firstOrFail();
     $notificationKey = 'telegram:'.$order->getKey().':order_created_summary';
@@ -409,7 +559,7 @@ test('order validation rejects invalid modality combinations and excessive depos
         ->set('depositAmount', '101.00')
         ->call('save')
         ->assertHasErrors(['cakeCategoryId', 'basePriceId', 'cakeDescription', 'depositAmount'])
-        ->assertSee('El anticipo no puede superar el precio pactado.');
+        ->assertSee('El anticipo inicial no puede ser mayor al precio pactado.');
 
     expect(Order::query()->count())->toBe(0);
 });
@@ -643,8 +793,8 @@ test('order detail displays history and audits controlled edits', function () {
     expect($user->fresh())->not->toBeNull();
 });
 
-test('pending orders reject reprogramming a delivery to the present or past', function () {
-    $this->travelTo(now()->setTime(12, 0));
+test('pending orders reject reprogramming to the current minute after its seconds have passed', function () {
+    $this->travelTo('2026-10-13 12:00:30');
     $user = User::factory()->owner()->create();
     $order = Order::factory()
         ->custom()
@@ -656,9 +806,10 @@ test('pending orders reject reprogramming a delivery to the present or past', fu
     Volt::test('orders.show', ['order' => $order])
         ->call('startEditing')
         ->set('deliveryAt', now()->format('Y-m-d\\TH:i'))
+        ->assertSeeHtml('min="2026-10-13T12:01"')
         ->call('saveChanges')
         ->assertHasErrors('deliveryAt')
-        ->assertSee('La fecha y hora de entrega debe ser posterior al momento actual.');
+        ->assertSee('La fecha y hora de entrega no puede ser anterior al momento actual.');
 
     expect($order->refresh()->delivery_at->equalTo($originalDeliveryAt))->toBeTrue();
     expect(ActivityLog::query()->where('order_id', $order->getKey())->where('event_type', ActivityEventType::OrderUpdated->value)->exists())->toBeFalse();
@@ -677,7 +828,7 @@ test('order service rejects reprogramming a pending order into the past', functi
         'cake_description' => $order->cake_description,
         'agreed_price' => (string) $order->agreed_price,
         'delivery_at' => now()->subMinute(),
-    ], $user))->toThrow(ValidationException::class, 'La fecha y hora de entrega debe ser posterior al momento actual.');
+    ], $user))->toThrow(ValidationException::class, 'La fecha y hora de entrega no puede ser anterior al momento actual.');
 
     expect($order->refresh()->delivery_at->isFuture())->toBeTrue();
     expect(ActivityLog::query()->where('order_id', $order->getKey())->where('event_type', ActivityEventType::OrderUpdated->value)->exists())->toBeFalse();
@@ -844,7 +995,7 @@ test('retiring pending orders without active payments cancels them while preserv
     ]);
 });
 
-test('retiring a pending order with active payments is rejected until the payments are voided', function () {
+test('retiring a pending order with active payments cancels it and preserves the payment', function () {
     $user = User::factory()->owner()->create();
     $order = Order::factory()->for($user, 'createdBy')->create();
     $payment = Payment::factory()->for($order)->for($user, 'registeredBy')->create();
@@ -852,13 +1003,15 @@ test('retiring a pending order with active payments is rejected until the paymen
 
     Volt::test('orders.show', ['order' => $order])
         ->call('deleteOrder')
-        ->assertHasErrors('status')
-        ->assertSee('Anula primero los pagos activos antes de cancelar el pedido.');
+        ->assertRedirect(route('orders.index', absolute: false));
 
-    expect($order->refresh()->status)->toBe(OrderStatus::Pending);
+    $retiredOrder = Order::withTrashed()->findOrFail($order->getKey());
+
+    expect($retiredOrder->status)->toBe(OrderStatus::Cancelled);
+    $this->assertSoftDeleted($order);
     expect($payment->refresh()->status)->toBe(PaymentStatus::Registered);
-    $this->assertModelExists($order);
-    $this->assertDatabaseMissing('activity_logs', [
+    $this->assertModelExists($payment);
+    $this->assertDatabaseHas('activity_logs', [
         'order_id' => $order->getKey(),
         'event_type' => ActivityEventType::OrderStatusChanged->value,
     ]);

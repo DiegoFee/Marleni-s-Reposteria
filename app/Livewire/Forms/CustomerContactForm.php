@@ -3,7 +3,7 @@
 namespace App\Livewire\Forms;
 
 use App\Models\Customer;
-use Illuminate\Validation\Rule;
+use App\Services\CustomerContactData;
 use Livewire\Form;
 
 class CustomerContactForm extends Form
@@ -18,7 +18,7 @@ class CustomerContactForm extends Form
     {
         $this->customer = $customer;
         $this->fullName = $customer?->full_name ?? '';
-        $this->phone = $customer?->phone ?? '';
+        $this->phone = $customer?->phoneFormatted() ?? '';
         $this->resetValidation();
     }
 
@@ -28,8 +28,8 @@ class CustomerContactForm extends Form
     public function validatedAttributes(?Customer $customer = null): array
     {
         $this->customer = $customer;
-        $this->fullName = trim($this->fullName);
-        $this->phone = trim($this->phone);
+        $this->fullName = CustomerContactData::normalizeName($this->fullName);
+        $this->phone = CustomerContactData::normalizePhone($this->phone);
 
         $validated = $this->validate();
 
@@ -57,17 +57,6 @@ class CustomerContactForm extends Form
      */
     protected function rules(): array
     {
-        $fullNameUnique = Rule::unique(Customer::class, 'full_name');
-        $phoneUnique = Rule::unique(Customer::class, 'phone');
-
-        if ($this->customer !== null) {
-            $fullNameUnique->ignore($this->customer);
-            $phoneUnique->ignore($this->customer);
-        }
-
-        return [
-            'fullName' => ['required', 'string', 'max:100', $fullNameUnique],
-            'phone' => ['required', 'digits:8', $phoneUnique],
-        ];
+        return CustomerContactData::rules($this->customer);
     }
 }

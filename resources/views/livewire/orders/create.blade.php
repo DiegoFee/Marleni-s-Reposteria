@@ -7,6 +7,7 @@ use App\Models\CakeCategory;
 use App\Models\Customer;
 use App\Models\Order;
 use App\Services\MoneyValidation;
+use App\Services\CustomerContactData;
 use App\Services\Orders\OrderService;
 use App\Livewire\Forms\OrderFormRules;
 use Illuminate\Database\Eloquent\Builder;
@@ -37,6 +38,27 @@ new class extends Component {
         $this->deliveryAt = now()->addDay()->format('Y-m-d\TH:i');
     }
 
+    public function minimumDeliveryAt(): string
+    {
+        $minimum = now();
+
+        if ($minimum->format('s.u') !== '00.000000') {
+            $minimum->addMinute();
+        }
+
+        return $minimum->startOfMinute()->format('Y-m-d\TH:i');
+    }
+
+    public function formatAgreedPrice(): void
+    {
+        $this->agreedPrice = MoneyValidation::formatInputValue($this->agreedPrice);
+    }
+
+    public function formatDepositAmount(): void
+    {
+        $this->depositAmount = MoneyValidation::formatInputValue($this->depositAmount);
+    }
+
     #[Computed]
     public function customerOptions(): Collection
     {
@@ -46,11 +68,15 @@ new class extends Component {
             return collect();
         }
 
+        $phoneSearch = CustomerContactData::phoneSearchTerm($search);
+
         return Customer::query()
-            ->where(function (Builder $query) use ($search): void {
-                $query
-                    ->where('full_name', 'like', "%{$search}%")
-                    ->orWhere('phone', 'like', "%{$search}%");
+            ->where(function (Builder $query) use ($search, $phoneSearch): void {
+                $query->where('full_name', 'like', "%{$search}%");
+
+                if ($phoneSearch !== null) {
+                    $query->orWhere('phone', 'like', "%{$phoneSearch}%");
+                }
             })
             ->orderBy('full_name')
             ->limit(8)
@@ -153,7 +179,8 @@ new class extends Component {
         $customerAttributes = $this->customerContact->validatedAttributes();
         $this->customerId = null;
         $this->newCustomerSelected = true;
-        $this->customerSearch = $customerAttributes['full_name'].' · '.$customerAttributes['phone'];
+        $formattedPhone = substr($customerAttributes['phone'], 0, 4).'-'.substr($customerAttributes['phone'], 4);
+        $this->customerSearch = $customerAttributes['full_name'].' · '.$formattedPhone;
         $this->showCustomerForm = false;
         $this->resetValidation();
         unset($this->customerOptions);
@@ -206,7 +233,7 @@ new class extends Component {
 
     private function customerLabel(Customer $customer): string
     {
-        return $customer->full_name.' · '.$customer->phone;
+        return $customer->full_name.' · '.$customer->phoneFormatted();
     }
 }; ?>
 
@@ -227,11 +254,13 @@ new class extends Component {
         </header>
 
         <form wire:submit="save" class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(20rem,26rem)]">
+            <x-validation-errors class="xl:col-span-2" />
             <div class="flex flex-col gap-6">
                 <section class="rounded-2xl border border-brand-200 bg-white p-6 shadow-sm dark:border-brand-800 dark:bg-brand-900/50">
                     <div class="flex flex-col gap-2">
-                        <h2 class="text-lg font-semibold text-brand-950 dark:text-brand-50">{{ __('Cliente') }}</h2>
+                        <h2 class="text-lg font-semibold text-brand-950 dark:text-brand-50">{{ __('Cliente') }} *</h2>
                         <p class="text-sm text-brand-700 dark:text-brand-200">{{ __('Busca un cliente existente o registra uno sin salir del pedido.') }}</p>
+                        <p class="text-xs text-brand-600 dark:text-brand-300"><span aria-hidden="true">*</span> {{ __('Campo obligatorio') }}</p>
                     </div>
 
                     <div class="mt-5 flex flex-col gap-4">
@@ -242,7 +271,10 @@ new class extends Component {
                             type="search"
                             autocomplete="off"
                             :readonly="$customerId !== null || $newCustomerSelected"
+                            :invalid="$errors->has('customerId')"
+                            aria-invalid="{{ $errors->has('customerId') ? 'true' : 'false' }}"
                         />
+                        <flux:error name="customerId" />
 
                         @if ($this->customerOptions->isNotEmpty())
                             <div class="-mt-2 overflow-hidden rounded-xl border border-brand-200 bg-white dark:border-brand-700 dark:bg-brand-900">
@@ -254,7 +286,7 @@ new class extends Component {
                                         class="flex min-h-11 w-full flex-col gap-1 border-b border-brand-100 px-4 py-3 text-left last:border-0 hover:bg-brand-50 dark:border-brand-800 dark:hover:bg-brand-950"
                                     >
                                         <span class="font-medium text-brand-950 dark:text-brand-50">{{ $customer->full_name }}</span>
-                                        <span class="text-sm text-brand-600 dark:text-brand-300">{{ $customer->phone }}</span>
+                                         <span class="text-sm text-brand-600 dark:text-brand-300">{{ $customer->phoneFormatted() }}</span>
                                     </button>
                                 @endforeach
                             </div>
@@ -278,8 +310,14 @@ new class extends Component {
 
                         @if ($showCustomerForm)
                             <div class="grid gap-4 rounded-xl border border-brand-200 bg-brand-50 p-4 dark:border-brand-700 dark:bg-brand-950/50 sm:grid-cols-2">
-                                <flux:input wire:model="customerContact.fullName" label="{{ __('Nombre completo') }}" name="customerContact.fullName" maxlength="100" required />
-                                <flux:input wire:model="customerContact.phone" label="{{ __('Teléfono') }}" name="customerContact.phone" type="tel" inputmode="numeric" maxlength="8" required />
+                                <div>
+                                    <flux:input wire:model="customerContact.fullName" label="{{ __('Nombre completo') }} *" name="customerContact.fullName" maxlength="100" :invalid="$errors->has('customerContact.fullName')" aria-invalid="{{ $errors->has('customerContact.fullName') ? 'true' : 'false' }}" required />
+                                    <flux:error name="customerContact.fullName" />
+                                </div>
+                                <div x-data="customerPhoneInput" x-on:input="format($event)">
+                                    <flux:input wire:model="customerContact.phone" label="{{ __('Teléfono') }} *" name="customerContact.phone" type="tel" inputmode="numeric" maxlength="9" description="{{ __('Ocho dígitos; el guion es solo de presentación.') }}" :invalid="$errors->has('customerContact.phone')" aria-invalid="{{ $errors->has('customerContact.phone') ? 'true' : 'false' }}" required />
+                                    <flux:error name="customerContact.phone" />
+                                </div>
                                 <p class="text-sm text-brand-700 dark:text-brand-200 sm:col-span-2">{{ __('El cliente se guardará junto con el pedido al pulsar “Guardar pedido”.') }}</p>
                                 <div class="flex flex-col gap-2 sm:col-span-2 sm:flex-row sm:justify-end">
                                     <flux:button wire:click="$set('showCustomerForm', false)" type="button" variant="ghost" tooltip="{{ __('Cerrar el formulario del cliente') }}">
@@ -292,9 +330,6 @@ new class extends Component {
                             </div>
                         @endif
 
-                        @error('customerId')
-                            <p class="text-sm text-rose-700 dark:text-rose-300">{{ $message }}</p>
-                        @enderror
                     </div>
                 </section>
 
@@ -305,25 +340,37 @@ new class extends Component {
                     </div>
 
                     <div class="mt-5 grid gap-4 md:grid-cols-2">
-                            <flux:select wire:model.live="captureMode" label="{{ __('Modalidad') }}" required>
+                            <div>
+                                <flux:select wire:model.live="captureMode" label="{{ __('Modalidad') }} *" :invalid="$errors->has('captureMode')" aria-invalid="{{ $errors->has('captureMode') ? 'true' : 'false' }}" required>
                                 <flux:select.option value="standard">{{ __('Estándar') }}</flux:select.option>
-                            <flux:select.option value="custom">{{ __('Personalizado') }}</flux:select.option>
-                        </flux:select>
+                                <flux:select.option value="custom">{{ __('Personalizado') }}</flux:select.option>
+                                </flux:select>
+                                <flux:error name="captureMode" />
+                            </div>
 
                         @if ($captureMode === CaptureMode::Standard->value)
-                                <flux:select wire:model="cakeCategoryId" label="{{ __('Categoría') }}" placeholder="{{ __('Selecciona una categoría') }}" required>
+                                <div>
+                                    <flux:select wire:model="cakeCategoryId" label="{{ __('Categoría') }} *" placeholder="{{ __('Selecciona una categoría') }}" :invalid="$errors->has('cakeCategoryId')" aria-invalid="{{ $errors->has('cakeCategoryId') ? 'true' : 'false' }}" required>
                                 @foreach ($this->activeCategories as $category)
                                     <flux:select.option value="{{ $category->id }}">{{ $category->name }}</flux:select.option>
                                 @endforeach
-                            </flux:select>
+                                    </flux:select>
+                                    <flux:error name="cakeCategoryId" />
+                                </div>
 
-                            <flux:select wire:model.live="basePriceId" label="{{ __('Precio base') }}" placeholder="{{ __('Selecciona un precio') }}" required>
+                            <div>
+                                <flux:select wire:model.live="basePriceId" label="{{ __('Precio base') }} *" placeholder="{{ __('Selecciona un precio') }}" :invalid="$errors->has('basePriceId')" aria-invalid="{{ $errors->has('basePriceId') ? 'true' : 'false' }}" required>
                                 @foreach ($this->activeBasePrices as $basePrice)
                                     <flux:select.option value="{{ $basePrice->id }}">Q {{ number_format((float) $basePrice->amount, 2, '.', ',') }}</flux:select.option>
                                 @endforeach
-                            </flux:select>
+                                </flux:select>
+                                <flux:error name="basePriceId" />
+                            </div>
                         @else
-                            <flux:textarea wire:model="cakeDescription" label="{{ __('Descripción del pastel') }}" placeholder="{{ __('Describe el diseño, sabor o detalles solicitados') }}" rows="4" class="md:col-span-2" required />
+                            <div class="md:col-span-2">
+                                <flux:textarea wire:model="cakeDescription" label="{{ __('Descripción del pastel') }} *" placeholder="{{ __('Describe el diseño, sabor o detalles solicitados') }}" rows="4" :invalid="$errors->has('cakeDescription')" aria-invalid="{{ $errors->has('cakeDescription') ? 'true' : 'false' }}" required />
+                                <flux:error name="cakeDescription" />
+                            </div>
                         @endif
                     </div>
                 </section>
@@ -337,16 +384,33 @@ new class extends Component {
                     </div>
 
                     <div class="mt-5 flex flex-col gap-4">
-                        <flux:input wire:model="agreedPrice" label="{{ __('Precio pactado') }}" type="number" min="0.01" max="{{ MoneyValidation::MAX_AMOUNT }}" step="0.01" prefix="Q" required />
-                        <flux:input wire:model="deliveryAt" label="{{ __('Fecha y hora de entrega') }}" type="datetime-local" required />
-                        <flux:input wire:model="depositAmount" label="{{ __('Anticipo inicial') }}" type="number" min="0" max="{{ MoneyValidation::MAX_AMOUNT }}" step="0.01" prefix="Q" />
+                        <flux:field>
+                            <flux:label>{{ __('Precio pactado') }} <span aria-hidden="true">*</span><span class="sr-only">{{ __('Obligatorio') }}</span></flux:label>
+                            <flux:input.group>
+                                <flux:input.group.prefix>Q</flux:input.group.prefix>
+                                <flux:input wire:model="agreedPrice" wire:blur="formatAgreedPrice" type="text" inputmode="decimal" maxlength="11" :invalid="$errors->has('agreedPrice')" aria-invalid="{{ $errors->has('agreedPrice') ? 'true' : 'false' }}" required />
+                            </flux:input.group>
+                            <flux:error name="agreedPrice" />
+                        </flux:field>
+                        <div>
+                            <flux:input wire:model="deliveryAt" label="{{ __('Fecha y hora de entrega') }} *" type="datetime-local" min="{{ $this->minimumDeliveryAt() }}" :invalid="$errors->has('deliveryAt')" aria-invalid="{{ $errors->has('deliveryAt') ? 'true' : 'false' }}" required />
+                            <flux:error name="deliveryAt" />
+                        </div>
+                        <flux:field>
+                            <flux:label>{{ __('Anticipo inicial') }}</flux:label>
+                            <flux:input.group>
+                                <flux:input.group.prefix>Q</flux:input.group.prefix>
+                                <flux:input wire:model="depositAmount" wire:blur="formatDepositAmount" type="text" inputmode="decimal" maxlength="11" :invalid="$errors->has('depositAmount')" aria-invalid="{{ $errors->has('depositAmount') ? 'true' : 'false' }}" />
+                            </flux:input.group>
+                            <flux:error name="depositAmount" />
+                        </flux:field>
                         <p class="text-xs leading-5 text-brand-600 dark:text-brand-300">{{ __('El anticipo es opcional y no puede superar el precio pactado.') }}</p>
                     </div>
                 </section>
 
                 <section class="rounded-2xl border border-brand-200 bg-brand-50 p-6 dark:border-brand-800 dark:bg-brand-950/50">
                     <p class="text-sm leading-6 text-brand-800 dark:text-brand-100">{{ __('Al guardar se creará el pedido con estado pendiente y se registrará su historial inicial.') }}</p>
-                    <flux:button type="submit" variant="primary" class="mt-5 w-full" tooltip="{{ __('Guardar el pedido con la información indicada') }}">
+                    <flux:button type="submit" variant="primary" class="mt-5 w-full" wire:loading.attr="disabled" wire:target="save" tooltip="{{ __('Guardar el pedido con la información indicada') }}">
                         {{ __('Guardar pedido') }}
                     </flux:button>
                 </section>

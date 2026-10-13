@@ -7,6 +7,7 @@ use App\Models\Customer;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\User;
+use App\Services\Orders\OrderDeletionService;
 use Livewire\Volt\Volt;
 
 test('retiring a delivered order keeps its state, payments, and history until permanent deletion', function () {
@@ -127,6 +128,22 @@ test('retiring an already cancelled order keeps its status and does not add a st
         'order_id' => $order->getKey(),
         'event_type' => ActivityEventType::OrderStatusChanged->value,
     ]);
+});
+
+test('retirement rolls back status and archive when recording the status event fails', function () {
+    $user = User::factory()->owner()->create();
+    $order = Order::factory()->for($user, 'createdBy')->create();
+
+    ActivityLog::creating(function (): void {
+        throw new RuntimeException('The status event could not be recorded.');
+    });
+
+    expect(fn () => app(OrderDeletionService::class)->delete($order, $user))
+        ->toThrow(RuntimeException::class, 'The status event could not be recorded.');
+
+    expect($order->refresh()->status)->toBe(OrderStatus::Pending);
+    $this->assertNotSoftDeleted($order);
+    $this->assertDatabaseCount('activity_logs', 0);
 });
 
 test('history is accessible without recent password confirmation', function () {

@@ -2,6 +2,7 @@
 
 namespace App\Services\Orders;
 
+use App\Enums\ActivityEventType;
 use App\Enums\OrderStatus;
 use App\Models\ActivityLog;
 use App\Models\Order;
@@ -12,8 +13,6 @@ use Illuminate\Support\Facades\Gate;
 
 class OrderDeletionService
 {
-    public function __construct(private OrderService $orderService) {}
-
     public function delete(Order $order, User $actor): void
     {
         DB::transaction(function () use ($order, $actor): void {
@@ -24,12 +23,19 @@ class OrderDeletionService
             Gate::forUser($actor)->authorize('delete', $lockedOrder);
 
             if ($lockedOrder->status === OrderStatus::Pending) {
-                $this->orderService->changeStatus(
-                    $lockedOrder,
-                    OrderStatus::Cancelled,
-                    $actor,
-                    reason: 'retired_to_history',
-                );
+                $lockedOrder->status = OrderStatus::Cancelled;
+                $lockedOrder->save();
+
+                $lockedOrder->activityLogs()->create([
+                    'actor_user_id' => $actor->getKey(),
+                    'event_type' => ActivityEventType::OrderStatusChanged,
+                    'details' => [
+                        'from' => OrderStatus::Pending->value,
+                        'to' => OrderStatus::Cancelled->value,
+                        'reason' => 'retired_to_history',
+                    ],
+                    'created_at' => now(),
+                ]);
             }
 
             $lockedOrder->delete();
@@ -53,7 +59,7 @@ class OrderDeletionService
                     'customer' => [
                         'id' => $lockedOrder->customer?->getKey(),
                         'full_name' => $lockedOrder->customer?->full_name,
-                        'phone' => $lockedOrder->customer?->phone,
+                        'phone' => $lockedOrder->customer?->phoneFormatted(),
                     ],
                     'capture_mode' => $lockedOrder->capture_mode->value,
                     'cake_category_id' => $lockedOrder->cake_category_id,

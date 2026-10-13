@@ -4,7 +4,6 @@ namespace App\Console\Commands;
 
 use App\Enums\ActivityEventType;
 use App\Enums\OrderStatus;
-use App\Enums\PaymentStatus;
 use App\Models\Order;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
@@ -19,29 +18,19 @@ class RepairArchivedPendingOrders extends Command
 
     public function handle(): int
     {
-        $archivedPendingCount = (clone $this->archivedPendingOrders())->count();
-        $repairableArchivedPendingOrders = $this->repairableArchivedPendingOrders();
-        $candidateCount = (clone $repairableArchivedPendingOrders)->count();
-        $blockedCount = $archivedPendingCount - $candidateCount;
+        $archivedPendingOrders = $this->archivedPendingOrders();
+        $candidateCount = (clone $archivedPendingOrders)->count();
 
         if (! $this->option('apply')) {
             if ($candidateCount === 0) {
-                if ($blockedCount > 0) {
-                    $this->components->warn("Simulación: {$blockedCount} pedido(s) archivado(s) pendiente(s) tienen pagos activos y requieren anulación antes de cancelarse. No se modificaron datos.");
-                } else {
-                    $this->components->info('Simulación: no hay pedidos archivados pendientes para corregir. No se modificaron datos.');
-                }
+                $this->components->info('Simulación: no hay pedidos archivados pendientes para corregir. No se modificaron datos.');
 
                 return self::SUCCESS;
             }
 
             $this->components->warn("Simulación: {$candidateCount} pedido(s) pasarían de Pendiente a Cancelado. No se modificaron datos.");
 
-            if ($blockedCount > 0) {
-                $this->components->warn("Se omiten {$blockedCount} pedido(s) con pagos activos; anula esos pagos antes de cancelarlos.");
-            }
-
-            $repairableArchivedPendingOrders
+            $archivedPendingOrders
                 ->select(['id', 'order_number', 'deleted_at'])
                 ->chunkById(100, function (Collection $orders): void {
                     foreach ($orders as $order) {
@@ -54,18 +43,14 @@ class RepairArchivedPendingOrders extends Command
         }
 
         if ($candidateCount === 0) {
-            if ($blockedCount > 0) {
-                $this->components->warn("No hay pedidos corregibles; {$blockedCount} pedido(s) archivado(s) tienen pagos activos que deben anularse antes de cancelar.");
-            } else {
-                $this->components->info('No hay pedidos archivados pendientes para corregir.');
-            }
+            $this->components->info('No hay pedidos archivados pendientes para corregir.');
 
             return self::SUCCESS;
         }
 
         $repairedCount = 0;
 
-        $repairableArchivedPendingOrders
+        $archivedPendingOrders
             ->select('id')
             ->chunkById(100, function (Collection $orders) use (&$repairedCount): void {
                 foreach ($orders as $order) {
@@ -77,10 +62,6 @@ class RepairArchivedPendingOrders extends Command
 
         $this->components->info("Pedidos regularizados: {$repairedCount}.");
 
-        if ($blockedCount > 0) {
-            $this->components->warn("Se omitieron {$blockedCount} pedido(s) con pagos activos; anula esos pagos antes de cancelarlos.");
-        }
-
         return self::SUCCESS;
     }
 
@@ -89,12 +70,6 @@ class RepairArchivedPendingOrders extends Command
         return Order::withTrashed()
             ->whereNotNull('deleted_at')
             ->where('status', OrderStatus::Pending->value);
-    }
-
-    private function repairableArchivedPendingOrders(): Builder
-    {
-        return $this->archivedPendingOrders()
-            ->whereDoesntHave('payments', fn (Builder $query): Builder => $query->where('status', PaymentStatus::Registered->value));
     }
 
     private function repairArchivedPendingOrder(int $orderId): bool
@@ -109,7 +84,6 @@ class RepairArchivedPendingOrders extends Command
                 $order === null
                 || ! $order->trashed()
                 || $order->status !== OrderStatus::Pending
-                || $order->payments()->where('status', PaymentStatus::Registered->value)->exists()
             ) {
                 return false;
             }

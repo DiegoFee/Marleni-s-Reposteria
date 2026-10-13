@@ -22,7 +22,7 @@ class OrderFormRules
         $deliveryAtRules = ['required', 'date'];
 
         if ($requireFutureDelivery) {
-            $deliveryAtRules[] = 'after:now';
+            $deliveryAtRules[] = 'after_or_equal:now';
         }
 
         $rules = [

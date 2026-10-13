@@ -1,4 +1,43 @@
 document.addEventListener('alpine:init', () => {
+    Alpine.data('customerPhoneInput', () => ({
+        format(event) {
+            const input = event.target;
+
+            if (! (input instanceof HTMLInputElement)) {
+                return;
+            }
+
+            const value = input.value;
+
+            if (! /^[0-9\s-]*$/.test(value)) {
+                return;
+            }
+
+            const digits = value.replace(/[\s-]/g, '');
+
+            if (digits.length > 8) {
+                return;
+            }
+
+            const digitPosition = value.slice(0, input.selectionStart ?? value.length).replace(/[\s-]/g, '').length;
+            const formatted = digits.length > 4
+                ? `${digits.slice(0, 4)}-${digits.slice(4)}`
+                : digits;
+
+            if (formatted === value) {
+                return;
+            }
+
+            input.value = formatted;
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+
+            if (document.activeElement === input && input.selectionStart !== null) {
+                const caretPosition = digitPosition > 4 ? digitPosition + 1 : digitPosition;
+                input.setSelectionRange(caretPosition, caretPosition);
+            }
+        },
+    }));
+
     Alpine.data('marleniSidebar', () => ({
         sidebarWidth: 288,
         sidebarHidden: false,

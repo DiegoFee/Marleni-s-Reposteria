@@ -20,6 +20,8 @@ test('authenticated users can search customers by name or phone', function () {
         ->assertSee('Ana Lopez')
         ->assertDontSee('Carlos Perez')
         ->set('search', '55555678')
+        ->assertSee('Carlos Perez')
+        ->set('search', '5555-5678')
         ->assertSee('Carlos Perez');
 });
 
@@ -36,6 +38,60 @@ test('customers can be created from the customer page', function () {
     expect(Customer::query()->where('full_name', 'Maria Garcia')->where('phone', '55551111')->exists())->toBeTrue();
 });
 
+test('customer contact normalization preserves accents, fictional numbers, and leading zeros', function () {
+    $this->actingAs(User::factory()->owner()->create());
+    $contacts = [
+        ['  José   Núñez  ', ' 5361 - 6569 ', 'José Núñez', '53616569'],
+        ['María del Carmen Pérez', '0000-0000', 'María del Carmen Pérez', '00000000'],
+        ['Ana López', '11111111', 'Ana López', '11111111'],
+        ['Juan Pablo', '01234567', 'Juan Pablo', '01234567'],
+    ];
+    $component = Volt::test('customers.index');
+
+    foreach ($contacts as [$enteredName, $enteredPhone, $expectedName, $expectedPhone]) {
+        $component
+            ->call('startCreating')
+            ->set('customerContact.fullName', $enteredName)
+            ->set('customerContact.phone', $enteredPhone)
+            ->call('saveCustomer')
+            ->assertHasNoErrors();
+
+        $customer = Customer::query()->where('full_name', $expectedName)->firstOrFail();
+
+        expect($customer->phone)->toBe($expectedPhone);
+    }
+
+    $customer = Customer::query()->where('full_name', 'José Núñez')->firstOrFail();
+
+    expect($customer->phoneFormatted())->toBe('5361-6569');
+    expect($customer->phoneInternational())->toBe('+50253616569');
+});
+
+test('customer contact rejects one-word names and invalid phone formats without rewriting them', function () {
+    $this->actingAs(User::factory()->owner()->create());
+    $component = Volt::test('customers.index');
+
+    $component
+        ->call('startCreating')
+        ->set('customerContact.fullName', 'Juan')
+        ->set('customerContact.phone', '53616569')
+        ->call('saveCustomer')
+        ->assertHasErrors('customerContact.fullName')
+        ->assertSee('Ingresa el nombre y al menos un apellido. Se permiten tildes y ñ.');
+
+    foreach (['1234567', '123456789', '5361a569', '٥٣٦١٦٥٦٩'] as $index => $phone) {
+        $component
+            ->call('startCreating')
+            ->set('customerContact.fullName', 'Cliente de prueba '.($index + 1))
+            ->set('customerContact.phone', $phone)
+            ->call('saveCustomer')
+            ->assertHasErrors('customerContact.phone')
+            ->assertSee('El teléfono debe contener exactamente ocho dígitos del 0 al 9.');
+    }
+
+    expect(Customer::query()->count())->toBe(0);
+});
+
 test('order creation stages a normalized customer contact without persisting it', function () {
     $this->actingAs(User::factory()->owner()->create());
 
@@ -47,7 +103,7 @@ test('order creation stages a normalized customer contact without persisting it'
         ->assertHasNoErrors()
         ->assertSet('showCustomerForm', false)
         ->assertSet('newCustomerSelected', true)
-        ->assertSet('customerSearch', 'María López · 55551234');
+        ->assertSet('customerSearch', 'María López · 5555-1234');
 
     expect(Customer::query()->count())->toBe(0);
 });
@@ -64,7 +120,8 @@ test('order creation rejects a customer contact that is already in use', functio
         ->set('customerContact.fullName', 'Otro cliente')
         ->set('customerContact.phone', '55550000')
         ->call('selectNewCustomer')
-        ->assertHasErrors('customerContact.phone');
+        ->assertHasErrors('customerContact.phone')
+        ->assertSee('El valor de teléfono ya está registrado.');
 
     expect(Customer::query()->count())->toBe(1);
 });
@@ -124,7 +181,7 @@ test('customer searches reject unbounded input', function () {
         ->assertHasErrors('search');
 });
 
-test('customer forms require unique names and eight digit phone numbers', function () {
+test('customer forms explain duplicate names and phone numbers', function () {
     $this->actingAs(User::factory()->owner()->create());
     Customer::factory()->create([
         'full_name' => 'Cliente existente',
@@ -134,7 +191,9 @@ test('customer forms require unique names and eight digit phone numbers', functi
     Volt::test('customers.index')
         ->call('startCreating')
         ->set('customerContact.fullName', 'Cliente existente')
-        ->set('customerContact.phone', '1234567')
+        ->set('customerContact.phone', '55550000')
         ->call('saveCustomer')
-        ->assertHasErrors(['customerContact.fullName', 'customerContact.phone']);
+        ->assertHasErrors(['customerContact.fullName', 'customerContact.phone'])
+        ->assertSee('El valor de nombre completo ya está registrado.')
+        ->assertSee('El valor de teléfono ya está registrado.');
 });

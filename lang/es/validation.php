@@ -32,6 +32,7 @@ return [
         'numeric' => 'El campo :attribute debe ser como mínimo :min.',
         'string' => 'El campo :attribute debe tener al menos :min caracteres.',
     ],
+    'regex' => 'El campo :attribute tiene un formato no válido.',
     'required' => 'El campo :attribute es obligatorio.',
     'prohibited' => 'El campo :attribute no está permitido en esta modalidad.',
     'string' => 'El campo :attribute debe ser una cadena de texto.',
@@ -51,10 +52,32 @@ return [
             'decimal' => 'El anticipo debe tener como máximo dos decimales.',
             'max' => 'El anticipo no puede superar Q 99,999,999.99.',
             'min' => 'El anticipo no puede ser negativo.',
-            'lte' => 'El anticipo no puede superar el precio pactado.',
+            'lte' => 'El anticipo inicial no puede ser mayor al precio pactado.',
+        ],
+        'fullName' => [
+            'regex' => 'Ingresa el nombre y al menos un apellido. Se permiten tildes y ñ.',
+        ],
+        'phone' => [
+            'regex' => 'El teléfono debe contener exactamente ocho dígitos del 0 al 9.',
+        ],
+        'full_name' => [
+            'regex' => 'Ingresa el nombre y al menos un apellido. Se permiten tildes y ñ.',
+        ],
+        'customerContact' => [
+            'fullName' => [
+                'regex' => 'Ingresa el nombre y al menos un apellido. Se permiten tildes y ñ.',
+            ],
+            'phone' => [
+                'regex' => 'El teléfono debe contener exactamente ocho dígitos del 0 al 9.',
+            ],
         ],
         'deliveryAt' => [
-            'after' => 'La fecha y hora de entrega debe ser posterior al momento actual.',
+            'required' => 'Indica la fecha y hora de entrega.',
+            'date' => 'Indica una fecha y hora de entrega válida.',
+            'after_or_equal' => 'La fecha y hora de entrega no puede ser anterior al momento actual.',
+        ],
+        'captureMode' => [
+            'enum' => 'Selecciona una modalidad válida.',
         ],
         'paymentAmount' => [
             'required' => 'Indica el importe del pago.',
@@ -86,10 +109,15 @@ return [
         'newCustomerPhone' => 'teléfono',
         'customerContact.fullName' => 'nombre completo',
         'customerContact.phone' => 'teléfono',
+        'customerContact' => [
+            'fullName' => 'nombre completo',
+            'phone' => 'teléfono',
+        ],
         'paymentAmount' => 'importe del pago',
         'paymentNotes' => 'nota del pago',
         'paymentPaidAt' => 'fecha del pago',
         'phone' => 'teléfono',
+        'full_name' => 'nombre completo',
         'search' => 'búsqueda',
         'status' => 'estado',
         'voidReason' => 'motivo de la anulación',

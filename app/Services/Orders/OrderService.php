@@ -14,14 +14,19 @@ use App\Models\Customer;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\User;
+use App\Services\CustomerContactData;
 use App\Services\MoneyValidation;
 use App\Services\Notifications\ReminderService;
 use Brick\Math\BigDecimal;
+use DateTimeInterface;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class OrderService
 {
@@ -45,73 +50,93 @@ class OrderService
                     'customerId' => 'Selecciona un cliente existente o registra uno nuevo, no ambos.',
                 ]);
             }
+
+            $newCustomerAttributes = CustomerContactData::validatedAttributes($newCustomerAttributes);
         }
 
-        $order = DB::transaction(function () use ($data, $actor, $newCustomerAttributes): Order {
-            $captureMode = $this->captureMode($data['capture_mode']);
-            $agreedPrice = MoneyValidation::requiredPositiveAmount($data['agreed_price'] ?? null, 'agreedPrice');
-            $depositAmount = MoneyValidation::optionalNonNegativeAmount($data['deposit_amount'] ?? null, 'depositAmount');
-            $deliveryAt = $this->validateDeliveryAt($data['delivery_at']);
+        try {
+            $order = DB::transaction(function () use ($data, $actor, $newCustomerAttributes): Order {
+                $captureMode = $this->captureMode($data['capture_mode'] ?? null);
+                $agreedPrice = MoneyValidation::requiredPositiveAmount($data['agreed_price'] ?? null, 'agreedPrice');
+                $depositAmount = MoneyValidation::optionalNonNegativeAmount($data['deposit_amount'] ?? null, 'depositAmount');
+                $deliveryAt = $this->validateDeliveryAt($data['delivery_at'] ?? null);
 
-            if ($newCustomerAttributes === null) {
-                $this->validateCustomerSelection($data['customer_id'] ?? null);
-            }
+                if ($newCustomerAttributes === null) {
+                    $this->validateCustomerSelection($data['customer_id'] ?? null);
+                }
 
-            $this->validateCatalogSelection($captureMode, $data);
+                $this->validateCatalogSelection($captureMode, $data);
 
-            if ($depositAmount->isGreaterThan($agreedPrice)) {
-                throw ValidationException::withMessages([
-                    'depositAmount' => trans('validation.custom.depositAmount.lte'),
-                ]);
-            }
+                if ($depositAmount->isGreaterThan($agreedPrice)) {
+                    throw ValidationException::withMessages([
+                        'depositAmount' => trans('validation.custom.depositAmount.lte'),
+                    ]);
+                }
 
-            $customerId = $newCustomerAttributes === null
-                ? $data['customer_id']
-                : Customer::query()->create($newCustomerAttributes)->getKey();
+                $customerId = $newCustomerAttributes === null
+                    ? $data['customer_id']
+                    : Customer::query()->create($newCustomerAttributes)->getKey();
 
-            $order = Order::query()->create([
-                'order_number' => $this->generateOrderNumber(),
-                'customer_id' => $customerId,
-                'created_by' => $actor->id,
-                'capture_mode' => $captureMode,
-                'cake_category_id' => $captureMode === CaptureMode::Standard ? $data['cake_category_id'] : null,
-                'base_price_id' => $captureMode === CaptureMode::Standard ? $data['base_price_id'] : null,
-                'cake_description' => $captureMode === CaptureMode::Custom ? trim((string) $data['cake_description']) : null,
-                'agreed_price' => $agreedPrice->toScale(2)->toString(),
-                'delivery_at' => $deliveryAt,
-                'status' => OrderStatus::Pending,
-            ]);
-
-            $this->recordActivity(
-                order: $order,
-                actor: $actor,
-                eventType: ActivityEventType::OrderCreated,
-                details: $this->orderDetails($order, $depositAmount->toScale(2)->toString()),
-            );
-
-            if ($depositAmount->isPositive()) {
-                $payment = $order->payments()->create([
-                    'registered_by' => $actor->id,
-                    'amount' => $depositAmount->toScale(2)->toString(),
-                    'payment_type' => PaymentType::Deposit,
-                    'paid_at' => now(),
-                    'status' => PaymentStatus::Registered,
+                $order = Order::query()->create([
+                    'order_number' => $this->generateOrderNumber(),
+                    'customer_id' => $customerId,
+                    'created_by' => $actor->id,
+                    'capture_mode' => $captureMode,
+                    'cake_category_id' => $captureMode === CaptureMode::Standard ? $data['cake_category_id'] : null,
+                    'base_price_id' => $captureMode === CaptureMode::Standard ? $data['base_price_id'] : null,
+                    'cake_description' => $captureMode === CaptureMode::Custom ? trim((string) $data['cake_description']) : null,
+                    'agreed_price' => $agreedPrice->toScale(2)->toString(),
+                    'delivery_at' => $deliveryAt,
+                    'status' => OrderStatus::Pending,
                 ]);
 
                 $this->recordActivity(
                     order: $order,
-                    payment: $payment,
                     actor: $actor,
-                    eventType: ActivityEventType::PaymentRegistered,
-                    details: [
-                        'amount' => $depositAmount->toScale(2)->toString(),
-                        'payment_type' => PaymentType::Deposit->value,
-                    ],
+                    eventType: ActivityEventType::OrderCreated,
+                    details: $this->orderDetails($order, $depositAmount->toScale(2)->toString()),
                 );
+
+                if ($depositAmount->isPositive()) {
+                    $payment = $order->payments()->create([
+                        'registered_by' => $actor->id,
+                        'amount' => $depositAmount->toScale(2)->toString(),
+                        'payment_type' => PaymentType::Deposit,
+                        'paid_at' => now(),
+                        'status' => PaymentStatus::Registered,
+                    ]);
+
+                    $this->recordActivity(
+                        order: $order,
+                        payment: $payment,
+                        actor: $actor,
+                        eventType: ActivityEventType::PaymentRegistered,
+                        details: [
+                            'amount' => $depositAmount->toScale(2)->toString(),
+                            'payment_type' => PaymentType::Deposit->value,
+                        ],
+                    );
+                }
+
+                return $order->fresh(['customer', 'cakeCategory', 'basePrice', 'payments', 'activityLogs']);
+            }, attempts: 3);
+        } catch (QueryException $exception) {
+            $field = $newCustomerAttributes === null
+                ? null
+                : CustomerContactData::uniqueConstraintField($exception);
+
+            if ($field !== null) {
+                $attribute = str_ends_with($field, 'fullName') ? 'fullName' : 'phone';
+
+                throw ValidationException::withMessages([
+                    $field => trans('validation.unique', [
+                        'attribute' => trans("validation.attributes.{$attribute}"),
+                    ]),
+                ]);
             }
 
-            return $order->fresh(['customer', 'cakeCategory', 'basePrice', 'payments', 'activityLogs']);
-        }, attempts: 3);
+            throw $exception;
+        }
 
         $this->notificationService->sendOrderCreatedSummary($order);
 
@@ -138,8 +163,8 @@ class OrderService
                 ]);
             }
 
-            $deliveryAt = $this->validateDeliveryAt($data['delivery_at'], $lockedOrder);
-            $captureMode = $this->captureMode($data['capture_mode']);
+            $deliveryAt = $this->validateDeliveryAt($data['delivery_at'] ?? null, $lockedOrder);
+            $captureMode = $this->captureMode($data['capture_mode'] ?? null);
             $agreedPrice = MoneyValidation::requiredPositiveAmount($data['agreed_price'] ?? null, 'agreedPrice');
             $registeredPayments = $this->money(
                 Payment::query()
@@ -148,7 +173,8 @@ class OrderService
                     ->sum('amount'),
             );
 
-            $this->validateCustomerSelection($data['customer_id'] ?? null);
+            $customerId = $data['customer_id'] ?? null;
+            $this->validateCustomerSelection($customerId);
             $this->validateCatalogSelection($captureMode, $data);
 
             if ($agreedPrice->isLessThan($registeredPayments)) {
@@ -160,7 +186,7 @@ class OrderService
             $oldDetails = $this->orderDetails($lockedOrder);
 
             $lockedOrder->fill([
-                'customer_id' => $data['customer_id'],
+                'customer_id' => $customerId,
                 'capture_mode' => $captureMode,
                 'cake_category_id' => $captureMode === CaptureMode::Standard ? $data['cake_category_id'] : null,
                 'base_price_id' => $captureMode === CaptureMode::Standard ? $data['base_price_id'] : null,
@@ -268,9 +294,19 @@ class OrderService
 
     private function captureMode(mixed $captureMode): CaptureMode
     {
-        return $captureMode instanceof CaptureMode
-            ? $captureMode
-            : CaptureMode::from((string) $captureMode);
+        if ($captureMode instanceof CaptureMode) {
+            return $captureMode;
+        }
+
+        $mode = CaptureMode::tryFrom(is_string($captureMode) ? $captureMode : '');
+
+        if ($mode === null) {
+            throw ValidationException::withMessages([
+                'captureMode' => trans('validation.custom.captureMode.enum'),
+            ]);
+        }
+
+        return $mode;
     }
 
     private function money(mixed $amount): BigDecimal
@@ -280,15 +316,45 @@ class OrderService
 
     private function validateDeliveryAt(mixed $requestedDeliveryAt, ?Order $order = null): Carbon
     {
-        $deliveryAt = Carbon::parse($requestedDeliveryAt);
+        if (blank($requestedDeliveryAt)) {
+            throw ValidationException::withMessages([
+                'deliveryAt' => trans('validation.custom.deliveryAt.required'),
+            ]);
+        }
+
+        if (! $requestedDeliveryAt instanceof DateTimeInterface) {
+            if (! is_string($requestedDeliveryAt)) {
+                throw ValidationException::withMessages([
+                    'deliveryAt' => trans('validation.custom.deliveryAt.date'),
+                ]);
+            }
+
+            Validator::make(
+                ['deliveryAt' => $requestedDeliveryAt],
+                ['deliveryAt' => ['required', 'date']],
+                [
+                    'deliveryAt.required' => trans('validation.custom.deliveryAt.required'),
+                    'deliveryAt.date' => trans('validation.custom.deliveryAt.date'),
+                ],
+            )->validate();
+        }
+
+        try {
+            $timezone = (string) config('app.timezone');
+            $deliveryAt = Carbon::parse($requestedDeliveryAt, $timezone)->setTimezone($timezone);
+        } catch (Throwable) {
+            throw ValidationException::withMessages([
+                'deliveryAt' => trans('validation.custom.deliveryAt.date'),
+            ]);
+        }
 
         if ($order !== null && $deliveryAt->format('Y-m-d\\TH:i') === $order->delivery_at->format('Y-m-d\\TH:i')) {
             return $order->delivery_at;
         }
 
-        if ($deliveryAt->lessThanOrEqualTo(now())) {
+        if ($deliveryAt->lessThan(now())) {
             throw ValidationException::withMessages([
-                'deliveryAt' => trans('validation.custom.deliveryAt.after'),
+                'deliveryAt' => trans('validation.custom.deliveryAt.after_or_equal'),
             ]);
         }
 

@@ -444,7 +444,7 @@ new class extends Component {
             ActivityEventType::OrderUpdated => __('Campos actualizados: ').implode(', ', array_map(fn (string $field): string => $this->orderFieldLabel($field), $activityLog->details['fields'] ?? [])),
             ActivityEventType::OrderStatusChanged => $this->orderStatusChangeSummary($activityLog),
             ActivityEventType::PaymentRegistered => $this->paymentTypeActivitySummary($activityLog),
-            ActivityEventType::PaymentVoided => __('Pago de Q ').($activityLog->details['amount'] ?? '0.00').' '.__('anulado: ').($activityLog->details['void_reason'] ?? ''),
+            ActivityEventType::PaymentVoided => __('Pago de Q ').$this->formatMoney($activityLog->details['amount'] ?? '0.00').' '.__('anulado: ').($activityLog->details['void_reason'] ?? ''),
             ActivityEventType::NotificationSent => ($activityLog->details['notification_type'] ?? null) === NotificationMessageType::OrderCreatedSummary->value
                 ? __('Resumen del pedido enviado a la administradora.')
                 : __('Recordatorio confirmado.'),
@@ -506,6 +506,34 @@ new class extends Component {
         return number_format((float) $amount, 2, '.', ',');
     }
 
+    public function formatAgreedPrice(): void
+    {
+        $this->agreedPrice = MoneyValidation::formatInputValue($this->agreedPrice);
+    }
+
+    public function formatPaymentAmount(): void
+    {
+        $this->paymentAmount = MoneyValidation::formatInputValue($this->paymentAmount);
+    }
+
+    public function deliveryAtMinimum(): ?string
+    {
+        if (
+            $this->deliveryAt === $this->order->delivery_at->format('Y-m-d\\TH:i')
+            && $this->order->delivery_at->lessThan(now())
+        ) {
+            return null;
+        }
+
+        $minimum = now();
+
+        if ($minimum->format('s.u') !== '00.000000') {
+            $minimum->addMinute();
+        }
+
+        return $minimum->startOfMinute()->format('Y-m-d\\TH:i');
+    }
+
     public function formatDate(?\Carbon\CarbonInterface $date): string
     {
         return $date?->format('d/m/Y H:i') ?? '—';
@@ -556,7 +584,7 @@ new class extends Component {
         $paymentType = PaymentType::tryFrom((string) ($activityLog->details['payment_type'] ?? PaymentType::Deposit->value));
         $label = $paymentType === null ? __('Pago') : $this->paymentTypeLabel($paymentType);
 
-        return $label.__(' de Q ').($activityLog->details['amount'] ?? '0.00');
+        return $label.__(' de Q ').$this->formatMoney($activityLog->details['amount'] ?? '0.00');
     }
 
     private function money(mixed $amount): BigDecimal
@@ -628,39 +656,56 @@ new class extends Component {
 
         @if ($editing)
             <form wire:submit="saveChanges" class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(20rem,26rem)]">
+                <x-validation-errors class="xl:col-span-2" :fields="['customerId', 'captureMode', 'cakeCategoryId', 'basePriceId', 'cakeDescription', 'agreedPrice', 'deliveryAt']" />
                 <div class="flex flex-col gap-6">
                     <section class="rounded-2xl border border-brand-200 bg-white p-6 shadow-sm dark:border-brand-800 dark:bg-brand-900/50">
                         <div class="flex flex-col gap-2">
                             <h2 class="text-lg font-semibold text-brand-950 dark:text-brand-50">{{ __('Datos editables') }}</h2>
                             <p class="text-sm text-brand-700 dark:text-brand-200">{{ __('Los cambios relevantes quedaran visibles en el historial.') }}</p>
+                            <p class="text-xs text-brand-600 dark:text-brand-300"><span aria-hidden="true">*</span> {{ __('Campo obligatorio') }}</p>
                         </div>
 
                         <div class="mt-5 grid gap-4 md:grid-cols-2">
-                            <flux:select wire:model="customerId" label="{{ __('Cliente') }}" required>
+                            <div>
+                                <flux:select wire:model="customerId" label="{{ __('Cliente') }} *" :invalid="$errors->has('customerId')" aria-invalid="{{ $errors->has('customerId') ? 'true' : 'false' }}" required>
                                 @foreach ($this->customers as $customer)
-                                    <flux:select.option value="{{ $customer->id }}">{{ $customer->full_name }} · {{ $customer->phone }}</flux:select.option>
+                                     <flux:select.option value="{{ $customer->id }}">{{ $customer->full_name }} · {{ $customer->phoneFormatted() }}</flux:select.option>
                                 @endforeach
-                            </flux:select>
+                                </flux:select>
+                                <flux:error name="customerId" />
+                            </div>
 
-                            <flux:select wire:model.live="captureMode" label="{{ __('Modalidad') }}" required>
+                            <div>
+                                <flux:select wire:model.live="captureMode" label="{{ __('Modalidad') }} *" :invalid="$errors->has('captureMode')" aria-invalid="{{ $errors->has('captureMode') ? 'true' : 'false' }}" required>
                                 <flux:select.option value="standard">{{ __('Estándar') }}</flux:select.option>
                                 <flux:select.option value="custom">{{ __('Personalizado') }}</flux:select.option>
-                            </flux:select>
+                                </flux:select>
+                                <flux:error name="captureMode" />
+                            </div>
 
                             @if ($captureMode === CaptureMode::Standard->value)
-                                <flux:select wire:model="cakeCategoryId" label="{{ __('Categoría') }}" placeholder="{{ __('Selecciona una categoría') }}" required>
+                                <div>
+                                    <flux:select wire:model="cakeCategoryId" label="{{ __('Categoría') }} *" placeholder="{{ __('Selecciona una categoría') }}" :invalid="$errors->has('cakeCategoryId')" aria-invalid="{{ $errors->has('cakeCategoryId') ? 'true' : 'false' }}" required>
                                     @foreach ($this->activeCategories as $category)
                                         <flux:select.option value="{{ $category->id }}">{{ $category->name }}</flux:select.option>
                                     @endforeach
-                                </flux:select>
+                                    </flux:select>
+                                    <flux:error name="cakeCategoryId" />
+                                </div>
 
-                                <flux:select wire:model.live="basePriceId" label="{{ __('Precio base') }}" placeholder="{{ __('Selecciona un precio') }}" required>
+                                <div>
+                                    <flux:select wire:model.live="basePriceId" label="{{ __('Precio base') }} *" placeholder="{{ __('Selecciona un precio') }}" :invalid="$errors->has('basePriceId')" aria-invalid="{{ $errors->has('basePriceId') ? 'true' : 'false' }}" required>
                                     @foreach ($this->activeBasePrices as $basePrice)
                                         <flux:select.option value="{{ $basePrice->id }}">Q {{ number_format((float) $basePrice->amount, 2, '.', ',') }}</flux:select.option>
                                     @endforeach
-                                </flux:select>
+                                    </flux:select>
+                                    <flux:error name="basePriceId" />
+                                </div>
                             @else
-                                <flux:textarea wire:model="cakeDescription" label="{{ __('Descripción del pastel') }}" rows="4" class="md:col-span-2" required />
+                                <div class="md:col-span-2">
+                                    <flux:textarea wire:model="cakeDescription" label="{{ __('Descripción del pastel') }} *" rows="4" :invalid="$errors->has('cakeDescription')" aria-invalid="{{ $errors->has('cakeDescription') ? 'true' : 'false' }}" required />
+                                    <flux:error name="cakeDescription" />
+                                </div>
                             @endif
                         </div>
                     </section>
@@ -674,14 +719,24 @@ new class extends Component {
                         </div>
 
                         <div class="mt-5 flex flex-col gap-4">
-                            <flux:input wire:model="agreedPrice" label="{{ __('Precio pactado') }}" type="number" min="0.01" max="{{ MoneyValidation::MAX_AMOUNT }}" step="0.01" prefix="Q" required />
-                            <flux:input wire:model="deliveryAt" label="{{ __('Fecha y hora de entrega') }}" type="datetime-local" required />
+                            <flux:field>
+                                <flux:label>{{ __('Precio pactado') }} <span aria-hidden="true">*</span><span class="sr-only">{{ __('Obligatorio') }}</span></flux:label>
+                                <flux:input.group>
+                                    <flux:input.group.prefix>Q</flux:input.group.prefix>
+                                    <flux:input wire:model="agreedPrice" wire:blur="formatAgreedPrice" type="text" inputmode="decimal" maxlength="11" :invalid="$errors->has('agreedPrice')" aria-invalid="{{ $errors->has('agreedPrice') ? 'true' : 'false' }}" required />
+                                </flux:input.group>
+                                <flux:error name="agreedPrice" />
+                            </flux:field>
+                            <div>
+                                <flux:input wire:model="deliveryAt" label="{{ __('Fecha y hora de entrega') }} *" type="datetime-local" @if ($this->deliveryAtMinimum() !== null) min="{{ $this->deliveryAtMinimum() }}" @endif :invalid="$errors->has('deliveryAt')" aria-invalid="{{ $errors->has('deliveryAt') ? 'true' : 'false' }}" required />
+                                <flux:error name="deliveryAt" />
+                            </div>
                         </div>
                     </section>
 
                     <section class="flex flex-col gap-2 sm:flex-row sm:justify-end">
                         <flux:button wire:click="cancelEditing" type="button" variant="ghost" tooltip="{{ __('Descartar los cambios del pedido') }}">{{ __('Cancelar') }}</flux:button>
-                        <flux:button type="submit" variant="primary" tooltip="{{ __('Guardar los cambios del pedido') }}">{{ __('Guardar cambios') }}</flux:button>
+                        <flux:button type="submit" variant="primary" wire:loading.attr="disabled" wire:target="saveChanges" tooltip="{{ __('Guardar los cambios del pedido') }}">{{ __('Guardar cambios') }}</flux:button>
                     </section>
                 </aside>
             </form>
@@ -691,7 +746,7 @@ new class extends Component {
                     <div class="flex flex-col gap-2">
                         <p class="text-sm font-semibold uppercase tracking-[0.18em] text-brand-600 dark:text-brand-300">{{ __('Cliente') }}</p>
                         <h2 class="text-xl font-semibold text-brand-950 dark:text-brand-50">{{ $order->customer->full_name }}</h2>
-                        <p class="text-sm text-brand-700 dark:text-brand-200">{{ $order->customer->phone }}</p>
+                         <p class="text-sm text-brand-700 dark:text-brand-200">{{ $order->customer->phoneFormatted() }}</p>
                     </div>
 
                     <dl class="mt-6 grid gap-5 sm:grid-cols-2">
@@ -793,11 +848,25 @@ new class extends Component {
                         </div>
 
                         <form wire:submit="savePayment" class="mt-5 flex flex-col gap-4">
-                            <flux:input wire:model="paymentAmount" label="{{ __('Importe') }}" type="number" min="0.01" max="{{ MoneyValidation::MAX_AMOUNT }}" step="0.01" prefix="Q" required />
+                            <x-validation-errors :fields="['paymentAmount', 'paymentPaidAt', 'paymentNotes']" />
+                            <flux:field>
+                                <flux:label>{{ __('Importe') }} <span aria-hidden="true">*</span><span class="sr-only">{{ __('Obligatorio') }}</span></flux:label>
+                                <flux:input.group>
+                                    <flux:input.group.prefix>Q</flux:input.group.prefix>
+                                    <flux:input wire:model="paymentAmount" wire:blur="formatPaymentAmount" type="text" inputmode="decimal" maxlength="11" :invalid="$errors->has('paymentAmount')" aria-invalid="{{ $errors->has('paymentAmount') ? 'true' : 'false' }}" required />
+                                </flux:input.group>
+                                <flux:error name="paymentAmount" />
+                            </flux:field>
                             <flux:input label="{{ __('Tipo de pago') }}" value="{{ $this->paymentTypeLabel($this->suggestedPaymentType) }}" readonly />
-                            <flux:input wire:model="paymentPaidAt" label="{{ __('Fecha del pago') }}" type="datetime-local" required />
-                            <flux:textarea wire:model="paymentNotes" label="{{ __('Nota opcional') }}" rows="3" />
-                            <flux:button type="submit" variant="primary" class="w-full" tooltip="{{ __('Registrar el pago y actualizar el saldo') }}">
+                            <div>
+                                <flux:input wire:model="paymentPaidAt" label="{{ __('Fecha del pago') }} *" type="datetime-local" :invalid="$errors->has('paymentPaidAt')" aria-invalid="{{ $errors->has('paymentPaidAt') ? 'true' : 'false' }}" required />
+                                <flux:error name="paymentPaidAt" />
+                            </div>
+                            <div>
+                                <flux:textarea wire:model="paymentNotes" label="{{ __('Nota opcional') }}" rows="3" :invalid="$errors->has('paymentNotes')" aria-invalid="{{ $errors->has('paymentNotes') ? 'true' : 'false' }}" />
+                                <flux:error name="paymentNotes" />
+                            </div>
+                            <flux:button type="submit" variant="primary" class="w-full" wire:loading.attr="disabled" wire:target="savePayment" tooltip="{{ __('Registrar el pago y actualizar el saldo') }}">
                                 {{ __('Registrar pago') }}
                             </flux:button>
                         </form>
@@ -808,6 +877,7 @@ new class extends Component {
              @if ($this->canEdit())
              <flux:modal wire:model="showVoidForm" focusable class="max-w-lg border border-brand-200 bg-brand-50 dark:border-brand-700 dark:bg-brand-950">
                  <form wire:submit="voidPayment" class="flex flex-col gap-5 text-base">
+                     <x-validation-errors :fields="['voidReason']" />
                      <div class="flex items-start gap-4">
                          <div class="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-brand-800 text-xl font-bold text-white shadow-lg shadow-brand-900/20">!</div>
                          <div>
@@ -816,7 +886,10 @@ new class extends Component {
                          </div>
                      </div>
 
-                    <flux:textarea wire:model="voidReason" label="{{ __('Motivo de la anulación') }}" rows="4" required />
+                    <div>
+                        <flux:textarea wire:model="voidReason" label="{{ __('Motivo de la anulación') }} *" rows="4" :invalid="$errors->has('voidReason')" aria-invalid="{{ $errors->has('voidReason') ? 'true' : 'false' }}" required />
+                        <flux:error name="voidReason" />
+                    </div>
 
                     <div class="flex flex-col gap-2 sm:flex-row sm:justify-end">
                         <flux:button wire:click="cancelPaymentVoid" type="button" variant="ghost" tooltip="{{ __('Cerrar sin anular el pago') }}">
@@ -893,7 +966,7 @@ new class extends Component {
                          <div class="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-brand-800 text-xl font-bold text-white shadow-lg shadow-brand-900/20">!</div>
                          <div>
                               <flux:heading size="lg" class="font-display text-brand-950 dark:text-brand-50">{{ __('¿Retirar pedido al Historial?') }}</flux:heading>
-                               <p class="mt-2 text-base leading-6 text-brand-700 dark:text-brand-200">{{ __('El pedido dejará de aparecer en Pedidos y conservará sus pagos y eventos. Si está Pendiente, pasará a Cancelado; para respetar la regla financiera, primero anula sus pagos activos. Si está Entregado o Cancelado, conservará ese estado.') }}</p>
+                                <p class="mt-2 text-base leading-6 text-brand-700 dark:text-brand-200">{{ __('El pedido dejará de aparecer en Pedidos y conservará sus pagos y eventos. Si está Pendiente, pasará a Cancelado sin anular ni reembolsar los pagos existentes. Si está Entregado o Cancelado, conservará ese estado.') }}</p>
                           </div>
                       </div>
 

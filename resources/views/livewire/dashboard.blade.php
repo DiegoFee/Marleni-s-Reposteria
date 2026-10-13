@@ -150,9 +150,11 @@ new class extends Component
             </p>
         </div>
 
-        <flux:button href="{{ route('orders.create') }}" wire:navigate variant="primary" icon="plus" tooltip="{{ __('Abrir el formulario para registrar un pedido') }}">
-            {{ __('Nuevo pedido') }}
-        </flux:button>
+        @can('create', Order::class)
+            <flux:button href="{{ route('orders.create') }}" wire:navigate variant="primary" icon="plus" tooltip="{{ __('Abrir el formulario para registrar un pedido') }}">
+                {{ __('Nuevo pedido') }}
+            </flux:button>
+        @endcan
     </header>
 
     <section class="grid gap-6 lg:grid-cols-3" aria-label="{{ __('Entregas próximas') }}">
@@ -188,7 +190,7 @@ new class extends Component
                                     <flux:badge color="amber">{{ __('Pendiente') }}</flux:badge>
                                 </div>
                                 <p class="text-sm font-medium text-rose-950 dark:text-rose-50">{{ $order->customer->full_name }}</p>
-                                <p class="text-sm text-rose-800 dark:text-rose-200">{{ $order->customer->phone }}</p>
+                                 <p class="text-sm text-rose-800 dark:text-rose-200">{{ $order->customer->phoneFormatted() }}</p>
                                 <p class="text-sm text-rose-800 dark:text-rose-200">{{ $this->cakeLabel($order) }}</p>
                             </div>
 
@@ -254,7 +256,7 @@ new class extends Component
                                     <flux:badge color="amber">{{ __('Pendiente') }}</flux:badge>
                                 </div>
                                 <p class="text-sm font-medium text-amber-950 dark:text-amber-50">{{ $order->customer->full_name }}</p>
-                                <p class="text-sm text-amber-800 dark:text-amber-200">{{ $order->customer->phone }}</p>
+                                 <p class="text-sm text-amber-800 dark:text-amber-200">{{ $order->customer->phoneFormatted() }}</p>
                                 <p class="text-sm text-amber-800 dark:text-amber-200">{{ $this->cakeLabel($order) }}</p>
                             </div>
 
@@ -320,7 +322,7 @@ new class extends Component
                                     <flux:badge color="amber">{{ __('Pendiente') }}</flux:badge>
                                 </div>
                                 <p class="text-sm font-medium text-orange-950 dark:text-orange-50">{{ $order->customer->full_name }}</p>
-                                <p class="text-sm text-orange-800 dark:text-orange-200">{{ $order->customer->phone }}</p>
+                                 <p class="text-sm text-orange-800 dark:text-orange-200">{{ $order->customer->phoneFormatted() }}</p>
                                 <p class="text-sm text-orange-800 dark:text-orange-200">{{ $this->cakeLabel($order) }}</p>
                             </div>
 
@@ -387,7 +389,7 @@ new class extends Component
                                 <flux:badge color="amber">{{ __('Pendiente') }}</flux:badge>
                             </div>
                             <p class="text-sm font-medium text-brand-950 dark:text-brand-50">{{ $order->customer->full_name }}</p>
-                            <p class="text-sm text-brand-700 dark:text-brand-200">{{ $order->customer->phone }} · {{ $this->cakeLabel($order) }}</p>
+                             <p class="text-sm text-brand-700 dark:text-brand-200">{{ $order->customer->phoneFormatted() }} · {{ $this->cakeLabel($order) }}</p>
                         </div>
 
                         <dl class="grid gap-3 text-sm sm:grid-cols-4">

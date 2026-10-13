@@ -20,7 +20,22 @@ test('authenticated users can visit the dashboard', function () {
         ->assertSee('Panel de control')
         ->assertSee('Vencidos y próximas 24 horas')
         ->assertSee('De 24 a 48 horas')
-        ->assertSee('Pedidos próximos');
+        ->assertSee('Pedidos próximos')
+        ->assertDontSee('Nuevo pedido');
+});
+
+test('only the owner sees the new-order shortcuts', function () {
+    $owner = User::factory()->owner()->create();
+    $this->actingAs($owner);
+
+    Volt::test('dashboard')->assertSee('Nuevo pedido');
+    Volt::test('orders.index')->assertSee('Nuevo pedido');
+
+    $assistant = User::factory()->assistant()->create();
+    $this->actingAs($assistant);
+
+    Volt::test('dashboard')->assertDontSee('Nuevo pedido');
+    Volt::test('orders.index')->assertDontSee('Nuevo pedido');
 });
 
 test('dashboard separates pending deliveries at the twenty-four and forty-eight hour boundaries', function () {
@@ -77,7 +92,7 @@ test('dashboard separates pending deliveries at the twenty-four and forty-eight 
             $futureOrder->order_number,
         ])
         ->assertSee($customer->full_name)
-        ->assertSee($customer->phone)
+        ->assertSee($customer->phoneFormatted())
         ->assertSee($urgentOrder->cakeCategory->name)
         ->assertSee($boundaryOrder->cake_description)
         ->assertSee('Q 180.00')

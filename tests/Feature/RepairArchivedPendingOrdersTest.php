@@ -13,6 +13,7 @@ test('repair simulation lists archived pending orders without changing data', fu
     $archivedPendingOrder = Order::factory()->for($user, 'createdBy')->create([
         'order_number' => 'PED-SIMULACION',
     ]);
+    $payment = Payment::factory()->for($archivedPendingOrder)->for($user, 'registeredBy')->create();
     $archivedPendingOrder->delete();
     $deletedAt = $archivedPendingOrder->deleted_at;
     $activePendingOrder = Order::factory()->for($user, 'createdBy')->create([
@@ -28,6 +29,7 @@ test('repair simulation lists archived pending orders without changing data', fu
 
     expect($archivedPendingOrder->status)->toBe(OrderStatus::Pending);
     expect($archivedPendingOrder->deleted_at->equalTo($deletedAt))->toBeTrue();
+    expect($payment->refresh()->status->value)->toBe('registered');
     expect($activePendingOrder->refresh()->status)->toBe(OrderStatus::Pending);
     $this->assertDatabaseMissing('activity_logs', [
         'order_id' => $archivedPendingOrder->getKey(),
@@ -35,7 +37,7 @@ test('repair simulation lists archived pending orders without changing data', fu
     ]);
 });
 
-test('repair applies only to archived pending orders and records an idempotent status event', function () {
+test('repair cancels all archived pending orders and records idempotent status events', function () {
     $user = User::factory()->owner()->create();
     $archivedPendingOrder = Order::factory()->for($user, 'createdBy')->create([
         'order_number' => 'PED-PENDIENTE-ARCHIVADO',
@@ -60,8 +62,7 @@ test('repair applies only to archived pending orders and records an idempotent s
     $archivedCancelledOrder->delete();
 
     $this->artisan('orders:repair-archived-pending', ['--apply' => true])
-        ->expectsOutputToContain('Pedidos regularizados: 1.')
-        ->expectsOutputToContain('Se omitieron 1 pedido(s) con pagos activos')
+        ->expectsOutputToContain('Pedidos regularizados: 2.')
         ->assertSuccessful();
 
     $repairedOrder = Order::withTrashed()->findOrFail($archivedPendingOrder->getKey());
@@ -80,6 +81,13 @@ test('repair applies only to archived pending orders and records an idempotent s
         'archived_at' => $deletedAt->toIso8601String(),
     ]);
 
+    $repairedOrderWithPayment = Order::withTrashed()->findOrFail($archivedPendingWithPayment->getKey());
+    expect($repairedOrderWithPayment->status)->toBe(OrderStatus::Cancelled);
+    $this->assertDatabaseHas('payments', [
+        'order_id' => $archivedPendingWithPayment->getKey(),
+        'status' => 'registered',
+    ]);
+
     $this->actingAs($user);
     $this->withSession(['auth.password_confirmed_at' => now()->timestamp]);
 
@@ -89,12 +97,11 @@ test('repair applies only to archived pending orders and records an idempotent s
         ->assertSee('Responsable: Sistema');
 
     expect($activePendingOrder->refresh()->status)->toBe(OrderStatus::Pending);
-    expect(Order::withTrashed()->findOrFail($archivedPendingWithPayment->getKey())->status)->toBe(OrderStatus::Pending);
     expect(Order::withTrashed()->findOrFail($archivedDeliveredOrder->getKey())->status)->toBe(OrderStatus::Delivered);
     expect(Order::withTrashed()->findOrFail($archivedCancelledOrder->getKey())->status)->toBe(OrderStatus::Cancelled);
 
     $this->artisan('orders:repair-archived-pending', ['--apply' => true])
-        ->expectsOutputToContain('No hay pedidos corregibles; 1 pedido(s) archivado(s) tienen pagos activos')
+        ->expectsOutputToContain('No hay pedidos archivados pendientes para corregir.')
         ->assertSuccessful();
 
     expect(ActivityLog::query()

@@ -10,6 +10,7 @@ use App\Models\ActivityLog;
 use App\Models\Order;
 use App\Models\User;
 use App\Services\Orders\OrderDeletionService;
+use App\Services\CustomerContactData;
 use Brick\Math\BigDecimal;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -35,17 +36,20 @@ new class extends Component {
     public function orders(): LengthAwarePaginator
     {
         $search = mb_substr(trim($this->search), 0, 100);
+        $phoneSearch = CustomerContactData::phoneSearchTerm($search);
 
         return $this->historyOrdersQuery()
             ->with(['customer'])
-            ->when($search !== '', function (Builder $query) use ($search): void {
-                $query->where(function (Builder $query) use ($search): void {
+            ->when($search !== '', function (Builder $query) use ($search, $phoneSearch): void {
+                $query->where(function (Builder $query) use ($search, $phoneSearch): void {
                     $query
                         ->where('order_number', 'like', "%{$search}%")
-                        ->orWhereHas('customer', function (Builder $query) use ($search): void {
-                            $query
-                                ->where('full_name', 'like', "%{$search}%")
-                                ->orWhere('phone', 'like', "%{$search}%");
+                        ->orWhereHas('customer', function (Builder $query) use ($search, $phoneSearch): void {
+                            $query->where('full_name', 'like', "%{$search}%");
+
+                            if ($phoneSearch !== null) {
+                                $query->orWhere('phone', 'like', "%{$phoneSearch}%");
+                            }
                         });
                 });
             })
@@ -234,7 +238,7 @@ new class extends Component {
             ActivityEventType::OrderUpdated => __('Campos actualizados: ').implode(', ', array_map(fn (string $field): string => $this->orderFieldLabel($field), $activityLog->details['fields'] ?? [])),
             ActivityEventType::OrderStatusChanged => $this->orderStatusChangeSummary($activityLog),
             ActivityEventType::PaymentRegistered => $this->paymentTypeActivitySummary($activityLog),
-            ActivityEventType::PaymentVoided => __('Pago de Q ').($activityLog->details['amount'] ?? '0.00').' '.__('anulado: ').($activityLog->details['void_reason'] ?? ''),
+            ActivityEventType::PaymentVoided => __('Pago de Q ').$this->formatMoney($activityLog->details['amount'] ?? '0.00').' '.__('anulado: ').($activityLog->details['void_reason'] ?? ''),
             ActivityEventType::NotificationSent => ($activityLog->details['notification_type'] ?? null) === NotificationMessageType::OrderCreatedSummary->value
                 ? __('Resumen del pedido enviado a la administradora.')
                 : __('Recordatorio confirmado.'),
@@ -315,7 +319,7 @@ new class extends Component {
         $paymentType = PaymentType::tryFrom((string) ($activityLog->details['payment_type'] ?? PaymentType::Deposit->value));
         $label = $paymentType === null ? __('Pago') : $this->paymentTypeLabel($paymentType);
 
-        return $label.__(' de Q ').($activityLog->details['amount'] ?? '0.00');
+        return $label.__(' de Q ').$this->formatMoney($activityLog->details['amount'] ?? '0.00');
     }
 
     private function money(mixed $amount): BigDecimal
@@ -404,7 +408,7 @@ new class extends Component {
                                     </td>
                                     <td class="px-5 py-4">
                                         <p class="font-medium text-brand-950 dark:text-brand-50">{{ $order->customer->full_name }}</p>
-                                        <p class="mt-1 text-xs text-brand-600 dark:text-brand-300">{{ $order->customer->phone }}</p>
+                                         <p class="mt-1 text-xs text-brand-600 dark:text-brand-300">{{ $order->customer->phoneFormatted() }}</p>
                                     </td>
                                     <td class="whitespace-nowrap px-5 py-4 text-brand-700 dark:text-brand-200">{{ $this->formatDeliveryDate($order->delivery_at) }}</td>
                                     <td class="px-5 py-4">
@@ -463,7 +467,7 @@ new class extends Component {
                     <section class="rounded-2xl border border-brand-200 bg-white p-5 shadow-sm dark:border-brand-800 dark:bg-brand-900/50">
                         <p class="text-sm font-semibold uppercase tracking-[0.18em] text-brand-600 dark:text-brand-300">{{ __('Cliente') }}</p>
                         <h3 class="mt-2 text-xl font-semibold text-brand-950 dark:text-brand-50">{{ $this->selectedOrder->customer->full_name }}</h3>
-                        <p class="mt-1 text-sm text-brand-700 dark:text-brand-200">{{ $this->selectedOrder->customer->phone }}</p>
+                         <p class="mt-1 text-sm text-brand-700 dark:text-brand-200">{{ $this->selectedOrder->customer->phoneFormatted() }}</p>
 
                         <dl class="mt-5 grid gap-4 sm:grid-cols-2">
                             <div>
