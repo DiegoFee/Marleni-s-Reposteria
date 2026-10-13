@@ -57,7 +57,9 @@ Aplicacion web interna para la administradora de Marleni's Reposteria. Permite g
 
    La aplicacion queda disponible normalmente en `http://localhost:8000`.
 
-## Montaje en servidor dedicado
+## Instalacion inicial en servidor dedicado
+
+Esta seccion aplica solo a una base de datos nueva y vacia. Para una instalacion que ya tiene datos, sigue «Actualizar una instalacion existente»; no vuelvas a generar su clave ni ejecutes seeders.
 
 El document root del servidor web debe apuntar a `public/`; nunca debe exponerse la raiz del repositorio. El proceso PHP-FPM debe tener permisos de lectura sobre el proyecto y escritura sobre `storage/` y `bootstrap/cache/`.
 
@@ -66,7 +68,9 @@ cd /var/www/sistema-pasteleria
 composer install --no-dev --prefer-dist --optimize-autoloader
 npm ci
 cp .env.example .env
+# Solo en esta instalacion nueva; conserva esta APP_KEY en despliegues posteriores.
 php artisan key:generate --force
+# Configura primero .env con APP_ENV=production, APP_DEBUG=false y credenciales validas.
 php artisan migrate --seed --force
 npm run build
 php artisan storage:link
@@ -75,7 +79,58 @@ php artisan view:cache
 chmod -R ug+rwX storage bootstrap/cache
 ```
 
-En el `.env` de produccion se deben definir `APP_ENV=production`, `APP_DEBUG=false`, `APP_URL`, las credenciales de MariaDB, `ADMIN_USERNAME`, `ADMIN_PASSWORD` y las variables del canal de recordatorios. Las credenciales no se escriben en el repositorio ni en la base de datos.
+En el `.env` de produccion se deben definir `APP_ENV=production`, `APP_DEBUG=false`, `APP_URL` con HTTPS, las credenciales de MariaDB, `ADMIN_USERNAME`, `ADMIN_PASSWORD` y las variables del canal de recordatorios. `ADMIN_USERNAME` debe ser unico y la clave de administracion solo se necesita para crear la cuenta inicial; no se vuelve a sembrar al actualizar. Usa `SESSION_SECURE_COOKIE=true` cuando el servicio se publique por HTTPS; si TLS termina en un proxy, configura tambien correctamente los proxies de confianza. Las credenciales no se escriben en el repositorio ni en la base de datos.
+
+## Actualizar una instalacion existente
+
+Realiza la actualizacion en una ventana controlada y conserva `.env`, `storage/`, `APP_KEY`, credenciales, catalogos y la configuracion/destinatario de Telegram. No uses `migrate:fresh`, `migrate:refresh`, `migrate:rollback`, `key:generate`, `migrate --seed` ni seeders masivos en una base operativa.
+
+1. Antes de cambiar codigo, confirma que `.env` apunta a la base correcta, `APP_ENV=production`, `APP_DEBUG=false` y `ADMIN_USERNAME` coincide exactamente con la cuenta que debe ser Dueña. Verifica que el respaldo tenga espacio suficiente y este fuera de `public/`.
+2. Crea el respaldo y verifica su restauracion en una base temporal aislada; no avances si la copia no restaura o no conserva tablas y relaciones.
+
+   ```bash
+   php artisan app:backup-database
+   ```
+
+3. Activa mantenimiento, publica una nueva version sin reemplazar `.env` ni `storage/`, instala exactamente las dependencias del lock y compila los recursos locales.
+
+   ```bash
+   php artisan down --retry=60
+   composer install --no-dev --prefer-dist --optimize-autoloader
+   npm ci
+   npm run build
+   ```
+
+4. Aplica exclusivamente las migraciones pendientes. La migracion de rol reconoce a la Dueña por `ADMIN_USERNAME`; no ejecuta el seeder administrativo ni crea o restablece contrasenas.
+
+   ```bash
+   php artisan migrate --force
+   php artisan migrate:status
+   ```
+
+5. Simula la reparacion historica y revisa los pedidos candidatos. El comando no cambia nada sin `--apply`; aplica solo despues de confirmar el listado. Los pedidos con pagos activos se omiten y requieren resolucion financiera de la Dueña.
+
+   ```bash
+   php artisan orders:repair-archived-pending
+   # Solo si la simulacion lista candidatos revisados:
+   php artisan orders:repair-archived-pending --apply
+   ```
+
+6. Reconstruye las caches de despliegue, comprueba las tareas programadas y abre el servicio. No limpies la cache de datos compartida como sustituto de estas caches.
+
+   ```bash
+   php artisan config:cache
+   php artisan route:cache
+   php artisan view:cache
+   php artisan schedule:list
+   php artisan up
+   ```
+
+7. Comprueba el acceso como Dueña y Asistente, el flujo de pedido/cliente/pago/historial, que los mensajes sigan usando la misma configuracion y destinatario, y que el cron existente ejecute `schedule:run` cada minuto. No agregues una segunda entrada de cron.
+
+Si falla la publicacion, vuelve al release anterior de codigo compatible con el esquema aditivo (la columna `users.role` puede permanecer). No reviertas la migracion ni los estados ya corregidos: los pedidos archivados regularizados deben conservar su estado y auditoria. Restaura una base desde el respaldo solo bajo una ventana controlada, despues de evaluar y proteger las operaciones registradas desde que se creo.
+
+Antes de abrir la aplicacion a usuarios, revisa los resultados actuales de `composer audit --locked` y `npm audit --audit-level=high --omit=dev`. Esta guia no autoriza cambios de dependencias; resuelve cualquier aviso en una actualizacion aprobada y probada por separado.
 
 El canal de recordatorios usa Telegram inicialmente; completar las credenciales del servidor antes de ejecutar el scheduler:
 

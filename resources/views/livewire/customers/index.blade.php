@@ -2,10 +2,11 @@
 
 use App\Enums\OrderStatus;
 use App\Enums\PaymentStatus;
+use App\Livewire\Forms\CustomerContactForm;
 use App\Models\Customer;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
-use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Gate;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Validate;
 use Livewire\Volt\Component;
@@ -18,8 +19,7 @@ new class extends Component {
     public string $search = '';
     public bool $showForm = false;
     public ?int $editingCustomerId = null;
-    public string $fullName = '';
-    public string $phone = '';
+    public CustomerContactForm $customerContact;
     public bool $showDeleteConfirmation = false;
     public ?int $deletingCustomerId = null;
 
@@ -49,6 +49,8 @@ new class extends Component {
 
     public function startCreating(): void
     {
+        Gate::authorize('create', Customer::class);
+
         $this->resetForm();
         $this->showForm = true;
     }
@@ -56,10 +58,10 @@ new class extends Component {
     public function editCustomer(int $customerId): void
     {
         $customer = Customer::query()->findOrFail($customerId);
+        Gate::authorize('update', $customer);
 
         $this->editingCustomerId = $customer->getKey();
-        $this->fullName = $customer->full_name;
-        $this->phone = $customer->phone;
+        $this->customerContact->setCustomer($customer);
         $this->showForm = true;
     }
 
@@ -70,37 +72,20 @@ new class extends Component {
 
     public function saveCustomer(): void
     {
-        $this->fullName = trim($this->fullName);
-        $this->phone = trim($this->phone);
+        $customer = null;
 
-        $customer = $this->editingCustomerId === null
-            ? null
-            : Customer::query()->findOrFail($this->editingCustomerId);
+        if ($this->editingCustomerId === null) {
+            Gate::authorize('create', Customer::class);
+        } else {
+            $customer = Customer::query()->findOrFail($this->editingCustomerId);
+            Gate::authorize('update', $customer);
+        }
 
-        $validated = $this->validate([
-            'fullName' => [
-                'required',
-                'string',
-                'max:100',
-                Rule::unique(Customer::class, 'full_name')->ignore($customer),
-            ],
-            'phone' => [
-                'required',
-                'digits:8',
-                Rule::unique(Customer::class, 'phone')->ignore($customer),
-            ],
-        ]);
-
-        $attributes = [
-            'full_name' => $validated['fullName'],
-            'phone' => $validated['phone'],
-        ];
+        $this->customerContact->save($customer);
 
         if ($customer === null) {
-            Customer::query()->create($attributes);
             session()->flash('status', 'Cliente registrado correctamente.');
         } else {
-            $customer->update($attributes);
             session()->flash('status', 'Cliente actualizado correctamente.');
         }
 
@@ -110,7 +95,7 @@ new class extends Component {
 
     public function requestDelete(int $customerId): void
     {
-        Customer::query()->findOrFail($customerId);
+        Gate::authorize('delete', Customer::query()->findOrFail($customerId));
 
         $this->deletingCustomerId = $customerId;
         $this->showDeleteConfirmation = true;
@@ -127,6 +112,7 @@ new class extends Component {
     public function deleteCustomer(): void
     {
         $customer = Customer::query()->findOrFail($this->deletingCustomerId);
+        Gate::authorize('delete', $customer);
 
         $hasPendingOrders = $customer->orders()
             ->withTrashed()
@@ -154,8 +140,8 @@ new class extends Component {
     {
         $this->showForm = false;
         $this->editingCustomerId = null;
-        $this->fullName = '';
-        $this->phone = '';
+        $this->customerContact->reset();
+        $this->customerContact->resetValidation();
         $this->resetValidation();
     }
 }; ?>
@@ -170,13 +156,23 @@ new class extends Component {
                     {{ __('Clientes') }}
                 </h1>
                 <p class="max-w-2xl text-sm text-brand-700 dark:text-brand-200">
-                    {{ __('Busca, registra y actualiza los datos de contacto.') }}
+                    @can('create', Customer::class)
+                        {{ __('Busca, registra y actualiza los datos de contacto.') }}
+                    @else
+                        {{ __('Consulta los datos de contacto de los clientes.') }}
+                    @endcan
                 </p>
             </div>
 
-            <flux:button wire:click="startCreating" variant="primary" icon="plus" tooltip="{{ __('Abrir formulario para registrar un cliente') }}">
-                {{ __('Nuevo cliente') }}
-            </flux:button>
+            @can('create', Customer::class)
+                <flux:button wire:click="startCreating" variant="primary" icon="plus" tooltip="{{ __('Abrir formulario para registrar un cliente') }}">
+                    {{ __('Nuevo cliente') }}
+                </flux:button>
+            @else
+                <p class="max-w-sm rounded-xl border border-brand-200 bg-white px-4 py-3 text-sm text-brand-700 dark:border-brand-800 dark:bg-brand-900/50 dark:text-brand-200">
+                    {{ __('Modo consulta: solo la Dueña puede crear, editar o borrar clientes.') }}
+                </p>
+            @endcan
         </header>
 
         <section @class([
@@ -203,7 +199,38 @@ new class extends Component {
                             <p class="mt-2 text-sm text-brand-700 dark:text-brand-200">{{ __('Prueba otra búsqueda o registra un cliente nuevo.') }}</p>
                         </div>
                     @else
-                        <div class="overflow-x-auto">
+                        <div class="space-y-3 p-3 md:hidden">
+                            @foreach ($this->customers as $customer)
+                                <article wire:key="customer-mobile-{{ $customer->id }}" class="flex min-w-0 flex-col gap-3 rounded-xl border border-brand-200 bg-brand-50/60 p-4 dark:border-brand-800 dark:bg-brand-950/40">
+                                    <div class="min-w-0">
+                                        <h2 class="break-words font-semibold text-brand-950 dark:text-brand-50">{{ $customer->full_name }}</h2>
+                                        <p class="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm text-brand-700 dark:text-brand-200">
+                                            <span class="text-xs font-semibold uppercase tracking-wide text-brand-600 dark:text-brand-300">{{ __('Teléfono') }}</span>
+                                            <span>{{ $customer->phone }}</span>
+                                        </p>
+                                    </div>
+
+                                    @canany(['update', 'delete'], $customer)
+                                        <div class="flex flex-wrap items-center gap-2 border-t border-brand-200 pt-3 dark:border-brand-800">
+                                            @can('update', $customer)
+                                                <flux:button wire:click="editCustomer({{ $customer->id }})" variant="ghost" size="sm" tooltip="{{ __('Editar los datos de este cliente') }}">
+                                                    {{ __('Editar') }}
+                                                </flux:button>
+                                            @endcan
+                                            @can('delete', $customer)
+                                                <flux:button wire:click="requestDelete({{ $customer->id }})" variant="danger" size="sm" class="marleni-danger-button" tooltip="{{ __('Borrar este cliente si no tiene acciones pendientes') }}">
+                                                    {{ __('Borrar') }}
+                                                </flux:button>
+                                            @endcan
+                                        </div>
+                                    @else
+                                        <p class="border-t border-brand-200 pt-3 text-sm text-brand-600 dark:border-brand-800 dark:text-brand-300">{{ __('Solo consulta') }}</p>
+                                    @endcanany
+                                </article>
+                            @endforeach
+                        </div>
+
+                        <div class="hidden overflow-x-auto md:block">
                             <table class="w-full min-w-[36rem] table-fixed divide-y divide-brand-200 text-left text-sm dark:divide-brand-800">
                                 <thead class="bg-brand-50 text-xs uppercase tracking-wide text-brand-700 dark:bg-brand-950/60 dark:text-brand-200">
                                     <tr>
@@ -218,14 +245,22 @@ new class extends Component {
                                             <td class="px-5 py-4 font-medium text-brand-950 dark:text-brand-50">{{ $customer->full_name }}</td>
                                             <td class="px-5 py-4 text-brand-700 dark:text-brand-200">{{ $customer->phone }}</td>
                                             <td class="px-5 py-4 text-right">
-                                                <div class="flex flex-wrap justify-end gap-2">
+                                                @canany(['update', 'delete'], $customer)
+                                                    <div class="flex flex-wrap justify-end gap-2">
+                                                        @can('update', $customer)
                                                     <flux:button wire:click="editCustomer({{ $customer->id }})" variant="ghost" size="sm" tooltip="{{ __('Editar los datos de este cliente') }}">
                                                         {{ __('Editar') }}
                                                     </flux:button>
+                                                        @endcan
+                                                        @can('delete', $customer)
                                                     <flux:button wire:click="requestDelete({{ $customer->id }})" variant="danger" size="sm" class="marleni-danger-button" tooltip="{{ __('Borrar este cliente si no tiene acciones pendientes') }}">
                                                         {{ __('Borrar') }}
                                                     </flux:button>
-                                                </div>
+                                                        @endcan
+                                                    </div>
+                                                @else
+                                                    <span class="text-sm text-brand-600 dark:text-brand-300">{{ __('Solo consulta') }}</span>
+                                                @endcanany
                                             </td>
                                         </tr>
                                     @endforeach
@@ -250,8 +285,8 @@ new class extends Component {
                     </div>
 
                     <form wire:submit="saveCustomer" class="mt-6 flex min-w-0 w-full flex-col gap-4">
-                        <flux:input wire:model="fullName" label="{{ __('Nombre completo') }}" name="fullName" maxlength="100" required autofocus class="min-w-0 w-full" />
-                        <flux:input wire:model="phone" label="{{ __('Teléfono') }}" name="phone" type="tel" inputmode="numeric" maxlength="8" required class="min-w-0 w-full" />
+                        <flux:input wire:model="customerContact.fullName" label="{{ __('Nombre completo') }}" name="customerContact.fullName" maxlength="100" required autofocus class="min-w-0 w-full" />
+                        <flux:input wire:model="customerContact.phone" label="{{ __('Teléfono') }}" name="customerContact.phone" type="tel" inputmode="numeric" maxlength="8" required class="min-w-0 w-full" />
 
                         <div class="flex flex-col gap-2 sm:flex-row sm:justify-end">
                             <flux:button wire:click="cancelForm" type="button" variant="ghost" tooltip="{{ __('Cerrar el formulario sin guardar') }}">
@@ -266,6 +301,7 @@ new class extends Component {
             @endif
         </section>
 
+        @can('manage-accounts')
         <flux:modal wire:model="showDeleteConfirmation" focusable class="max-w-lg border border-brand-200 bg-brand-50 dark:border-brand-700 dark:bg-brand-950">
             <div class="flex flex-col gap-5 text-base">
                 <div class="flex items-start gap-4">
@@ -286,4 +322,5 @@ new class extends Component {
                 </div>
             </div>
         </flux:modal>
+        @endcan
 </div>

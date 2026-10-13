@@ -87,9 +87,15 @@ new class extends Component {
                 </p>
             </div>
 
-            <flux:button href="{{ route('orders.create') }}" wire:navigate variant="primary" icon="plus" tooltip="{{ __('Abrir el formulario para registrar un pedido') }}">
-                {{ __('Nuevo pedido') }}
-            </flux:button>
+            @can('create', \App\Models\Order::class)
+                <flux:button href="{{ route('orders.create') }}" wire:navigate variant="primary" icon="plus" tooltip="{{ __('Abrir el formulario para registrar un pedido') }}">
+                    {{ __('Nuevo pedido') }}
+                </flux:button>
+            @else
+                <p class="max-w-sm rounded-xl border border-brand-200 bg-white px-4 py-3 text-sm text-brand-700 dark:border-brand-800 dark:bg-brand-900/50 dark:text-brand-200">
+                    {{ __('Tu rol permite consultar pedidos y actualizar sus estados autorizados.') }}
+                </p>
+            @endcan
         </header>
 
         <section class="flex flex-col gap-4">

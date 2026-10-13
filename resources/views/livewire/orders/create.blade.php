@@ -1,15 +1,18 @@
 <?php
 
 use App\Enums\CaptureMode;
+use App\Livewire\Forms\CustomerContactForm;
 use App\Models\BasePrice;
 use App\Models\CakeCategory;
 use App\Models\Customer;
+use App\Models\Order;
+use App\Services\MoneyValidation;
 use App\Services\Orders\OrderService;
+use App\Livewire\Forms\OrderFormRules;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Validation\Rule;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Validate;
 use Livewire\Volt\Component;
@@ -19,8 +22,8 @@ new class extends Component {
     #[Validate('string|max:100')]
     public string $customerSearch = '';
     public bool $showCustomerForm = false;
-    public string $newCustomerName = '';
-    public string $newCustomerPhone = '';
+    public bool $newCustomerSelected = false;
+    public CustomerContactForm $customerContact;
     public string $captureMode = 'standard';
     public string $cakeCategoryId = '';
     public string $basePriceId = '';
@@ -39,7 +42,7 @@ new class extends Component {
     {
         $search = mb_substr(trim($this->customerSearch), 0, 100);
 
-        if ($search === '' || $this->customerId !== null) {
+        if ($search === '' || $this->customerId !== null || $this->newCustomerSelected) {
             return collect();
         }
 
@@ -79,6 +82,10 @@ new class extends Component {
 
     public function updatedCustomerSearch(): void
     {
+        if ($this->newCustomerSelected) {
+            $this->newCustomerSelected = false;
+        }
+
         if ($this->customerId !== null) {
             $selectedCustomer = Customer::query()->find($this->customerId);
 
@@ -111,7 +118,10 @@ new class extends Component {
     {
         $customer = Customer::query()->findOrFail($customerId);
 
+        $this->customerContact->reset();
+        $this->customerContact->resetValidation();
         $this->customerId = $customer->getKey();
+        $this->newCustomerSelected = false;
         $this->customerSearch = $this->customerLabel($customer);
         $this->showCustomerForm = false;
         unset($this->customerOptions);
@@ -119,54 +129,60 @@ new class extends Component {
 
     public function clearCustomer(): void
     {
+        if ($this->newCustomerSelected) {
+            $this->newCustomerSelected = false;
+            $this->customerSearch = '';
+            $this->showCustomerForm = true;
+            unset($this->customerOptions);
+
+            return;
+        }
+
         $this->customerId = null;
         $this->customerSearch = '';
+        $this->showCustomerForm = false;
+        $this->customerContact->reset();
+        $this->customerContact->resetValidation();
         unset($this->customerOptions);
     }
 
-    public function createCustomer(): void
+    public function selectNewCustomer(): void
     {
-        $this->newCustomerName = trim($this->newCustomerName);
-        $this->newCustomerPhone = trim($this->newCustomerPhone);
+        Gate::authorize('create', Customer::class);
 
-        $validated = $this->validate([
-            'newCustomerName' => [
-                'required',
-                'string',
-                'max:100',
-                Rule::unique(Customer::class, 'full_name'),
-            ],
-            'newCustomerPhone' => [
-                'required',
-                'digits:8',
-                Rule::unique(Customer::class, 'phone'),
-            ],
-        ]);
-
-        $attributes = [
-            'full_name' => $validated['newCustomerName'],
-            'phone' => $validated['newCustomerPhone'],
-        ];
-
-        $customer = Customer::query()->create($attributes);
-
-        $this->newCustomerName = '';
-        $this->newCustomerPhone = '';
+        $customerAttributes = $this->customerContact->validatedAttributes();
+        $this->customerId = null;
+        $this->newCustomerSelected = true;
+        $this->customerSearch = $customerAttributes['full_name'].' · '.$customerAttributes['phone'];
+        $this->showCustomerForm = false;
         $this->resetValidation();
-        $this->selectCustomer($customer->getKey());
+        unset($this->customerOptions);
     }
 
     public function save(): void
     {
+        Gate::authorize('create', Order::class);
+
         $this->cakeDescription = trim($this->cakeDescription);
         $this->agreedPrice = trim($this->agreedPrice);
         $this->deliveryAt = trim($this->deliveryAt);
         $this->depositAmount = trim($this->depositAmount);
 
-        $validated = $this->validate($this->orderRules());
+        $newCustomerAttributes = null;
 
-        $order = app(OrderService::class)->create([
-            'customer_id' => (int) $validated['customerId'],
+        if ($this->isCreatingNewCustomer()) {
+            Gate::authorize('create', Customer::class);
+            $newCustomerAttributes = $this->customerContact->validatedAttributes();
+        }
+
+        $validated = $this->validate(OrderFormRules::order(
+            captureMode: $this->captureMode,
+            newCustomer: $this->isCreatingNewCustomer(),
+            includeDeposit: true,
+        ));
+
+        $orderData = [
+            'customer_id' => $newCustomerAttributes === null ? (int) $validated['customerId'] : null,
             'capture_mode' => CaptureMode::from($validated['captureMode']),
             'cake_category_id' => blank($validated['cakeCategoryId']) ? null : (int) $validated['cakeCategoryId'],
             'base_price_id' => blank($validated['basePriceId']) ? null : (int) $validated['basePriceId'],
@@ -174,40 +190,18 @@ new class extends Component {
             'agreed_price' => $validated['agreedPrice'],
             'delivery_at' => $validated['deliveryAt'],
             'deposit_amount' => blank($validated['depositAmount']) ? '0' : $validated['depositAmount'],
-        ], Auth::user());
+        ];
+
+        $order = app(OrderService::class)->create($orderData, Auth::user(), $newCustomerAttributes);
 
         session()->flash('status', 'Pedido registrado correctamente.');
 
         $this->redirect(route('orders.show', $order), navigate: true);
     }
 
-    /**
-     * @return array<string, array<int, mixed>>
-     */
-    private function orderRules(): array
+    private function isCreatingNewCustomer(): bool
     {
-        $isStandard = $this->captureMode === CaptureMode::Standard->value;
-
-        return [
-            'customerId' => [
-                'required',
-                'integer',
-                Rule::exists('customers', 'id')->where(fn (QueryBuilder $query) => $query->whereNull('deleted_at')),
-            ],
-            'captureMode' => ['required', Rule::enum(CaptureMode::class)],
-            'cakeCategoryId' => $isStandard
-                ? ['required', 'integer', Rule::exists('cake_categories', 'id')->where(fn (QueryBuilder $query) => $query->where('is_active', true))]
-                : ['nullable', 'prohibited'],
-            'basePriceId' => $isStandard
-                ? ['required', 'integer', Rule::exists('base_prices', 'id')->where(fn (QueryBuilder $query) => $query->where('is_active', true))]
-                : ['nullable', 'prohibited'],
-            'cakeDescription' => $isStandard
-                ? ['nullable', 'string', 'max:500']
-                : ['required', 'string', 'max:500'],
-            'agreedPrice' => ['required', 'numeric', 'decimal:0,2', 'max:99999999.99', 'gt:0'],
-            'deliveryAt' => ['required', 'date'],
-            'depositAmount' => ['nullable', 'numeric', 'decimal:0,2', 'max:99999999.99', 'min:0', 'lte:agreedPrice'],
-        ];
+        return $this->newCustomerSelected || ($this->showCustomerForm && $this->customerId === null);
     }
 
     private function customerLabel(Customer $customer): string
@@ -247,7 +241,7 @@ new class extends Component {
                             placeholder="{{ __('Escribe para buscar') }}"
                             type="search"
                             autocomplete="off"
-                            :readonly="$customerId !== null"
+                            :readonly="$customerId !== null || $newCustomerSelected"
                         />
 
                         @if ($this->customerOptions->isNotEmpty())
@@ -266,10 +260,10 @@ new class extends Component {
                             </div>
                         @endif
 
-                        @if ($customerId !== null)
+                        @if ($customerId !== null || $newCustomerSelected)
                             <div class="flex items-center justify-between gap-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm dark:border-emerald-900/60 dark:bg-emerald-950/30">
                                 <div>
-                                    <p class="font-semibold text-emerald-950 dark:text-emerald-50">{{ __('Cliente seleccionado') }}</p>
+                                    <p class="font-semibold text-emerald-950 dark:text-emerald-50">{{ $newCustomerSelected ? __('Cliente nuevo para el pedido') : __('Cliente seleccionado') }}</p>
                                     <p class="mt-1 text-emerald-800 dark:text-emerald-100">{{ $customerSearch }}</p>
                                 </div>
                                 <flux:button wire:click="clearCustomer" type="button" variant="ghost" size="sm" tooltip="{{ __('Quitar el cliente seleccionado y elegir otro') }}">
@@ -284,18 +278,23 @@ new class extends Component {
 
                         @if ($showCustomerForm)
                             <div class="grid gap-4 rounded-xl border border-brand-200 bg-brand-50 p-4 dark:border-brand-700 dark:bg-brand-950/50 sm:grid-cols-2">
-                                <flux:input wire:model="newCustomerName" label="{{ __('Nombre completo') }}" name="newCustomerName" maxlength="100" />
-                                <flux:input wire:model="newCustomerPhone" label="{{ __('Teléfono') }}" name="newCustomerPhone" type="tel" inputmode="numeric" maxlength="8" />
+                                <flux:input wire:model="customerContact.fullName" label="{{ __('Nombre completo') }}" name="customerContact.fullName" maxlength="100" required />
+                                <flux:input wire:model="customerContact.phone" label="{{ __('Teléfono') }}" name="customerContact.phone" type="tel" inputmode="numeric" maxlength="8" required />
+                                <p class="text-sm text-brand-700 dark:text-brand-200 sm:col-span-2">{{ __('El cliente se guardará junto con el pedido al pulsar “Guardar pedido”.') }}</p>
                                 <div class="flex flex-col gap-2 sm:col-span-2 sm:flex-row sm:justify-end">
                                     <flux:button wire:click="$set('showCustomerForm', false)" type="button" variant="ghost" tooltip="{{ __('Cerrar el formulario del cliente') }}">
                                         {{ __('Cancelar') }}
                                     </flux:button>
-                                    <flux:button wire:click="createCustomer" type="button" variant="primary" tooltip="{{ __('Crear y seleccionar este cliente') }}">
+                                    <flux:button wire:click="selectNewCustomer" type="button" variant="primary" tooltip="{{ __('Preparar este cliente para guardarlo junto con el pedido') }}">
                                         {{ __('Usar este cliente') }}
                                     </flux:button>
                                 </div>
                             </div>
                         @endif
+
+                        @error('customerId')
+                            <p class="text-sm text-rose-700 dark:text-rose-300">{{ $message }}</p>
+                        @enderror
                     </div>
                 </section>
 
@@ -338,9 +337,9 @@ new class extends Component {
                     </div>
 
                     <div class="mt-5 flex flex-col gap-4">
-                        <flux:input wire:model="agreedPrice" label="{{ __('Precio pactado') }}" type="number" min="0.01" step="0.01" prefix="Q" required />
+                        <flux:input wire:model="agreedPrice" label="{{ __('Precio pactado') }}" type="number" min="0.01" max="{{ MoneyValidation::MAX_AMOUNT }}" step="0.01" prefix="Q" required />
                         <flux:input wire:model="deliveryAt" label="{{ __('Fecha y hora de entrega') }}" type="datetime-local" required />
-                        <flux:input wire:model="depositAmount" label="{{ __('Anticipo inicial') }}" type="number" min="0" step="0.01" prefix="Q" />
+                        <flux:input wire:model="depositAmount" label="{{ __('Anticipo inicial') }}" type="number" min="0" max="{{ MoneyValidation::MAX_AMOUNT }}" step="0.01" prefix="Q" />
                         <p class="text-xs leading-5 text-brand-600 dark:text-brand-300">{{ __('El anticipo es opcional y no puede superar el precio pactado.') }}</p>
                     </div>
                 </section>

@@ -8,10 +8,11 @@ use App\Models\Order;
 use App\Models\Payment;
 use App\Models\User;
 use App\Services\Payments\PaymentService;
+use Illuminate\Validation\ValidationException;
 use Livewire\Volt\Volt;
 
 test('payments classify deposits partials and settlements while recalculating the balance', function () {
-    $user = User::factory()->create();
+    $user = User::factory()->owner()->create();
     $this->actingAs($user);
     $order = Order::factory()->create(['agreed_price' => '300.00']);
     $paidAt = now()->format('Y-m-d\TH:i');
@@ -54,7 +55,7 @@ test('payments classify deposits partials and settlements while recalculating th
 });
 
 test('payments that exceed the agreed price are rejected without being persisted', function () {
-    $user = User::factory()->create();
+    $user = User::factory()->owner()->create();
     $this->actingAs($user);
     $order = Order::factory()->create(['agreed_price' => '100.00']);
     $component = Volt::test('orders.show', ['order' => $order]);
@@ -67,27 +68,62 @@ test('payments that exceed the agreed price are rejected without being persisted
     $component
         ->set('paymentAmount', '30.01')
         ->call('savePayment')
-        ->assertHasErrors('paymentAmount');
+        ->assertHasErrors('paymentAmount')
+        ->assertSee('El pago no puede superar el saldo pendiente.');
 
     expect(Payment::query()->where('order_id', $order->id)->count())->toBe(1);
     expect(ActivityLog::query()->where('order_id', $order->id)->where('event_type', ActivityEventType::PaymentRegistered->value)->count())->toBe(1);
 });
 
 test('payment forms reject amounts above the database precision', function () {
-    $user = User::factory()->create();
+    $user = User::factory()->owner()->create();
     $order = Order::factory()->create(['agreed_price' => '99999999.99']);
     $this->actingAs($user);
 
     Volt::test('orders.show', ['order' => $order])
         ->set('paymentAmount', '100000000.00')
         ->call('savePayment')
-        ->assertHasErrors('paymentAmount');
+        ->assertHasErrors('paymentAmount')
+        ->assertSee('El importe del pago no puede superar Q 99,999,999.99.');
+
+    Volt::test('orders.show', ['order' => $order])
+        ->set('paymentAmount', '10.001')
+        ->call('savePayment')
+        ->assertHasErrors('paymentAmount')
+        ->assertSee('El importe del pago debe tener como máximo dos decimales.');
 
     expect(Payment::query()->where('order_id', $order->id)->count())->toBe(0);
 });
 
+test('payment validation displays the localized required amount message', function () {
+    $user = User::factory()->owner()->create();
+    $order = Order::factory()->for($user, 'createdBy')->create();
+    $this->actingAs($user);
+
+    Volt::test('orders.show', ['order' => $order])
+        ->set('paymentAmount', '')
+        ->call('savePayment')
+        ->assertHasErrors('paymentAmount')
+        ->assertSee('Indica el importe del pago.');
+
+    expect(Payment::query()->where('order_id', $order->getKey())->count())->toBe(0);
+});
+
+test('payment service rejects amounts with more than two decimal places', function () {
+    $user = User::factory()->owner()->create();
+    $order = Order::factory()->for($user, 'createdBy')->create(['agreed_price' => '200.00']);
+
+    expect(fn () => app(PaymentService::class)->register($order, [
+        'amount' => '10.001',
+        'paid_at' => now(),
+    ], $user))->toThrow(ValidationException::class, 'El importe del pago debe tener como máximo dos decimales.');
+
+    expect(Payment::query()->where('order_id', $order->getKey())->count())->toBe(0);
+    expect(ActivityLog::query()->where('order_id', $order->getKey())->where('event_type', ActivityEventType::PaymentRegistered->value)->exists())->toBeFalse();
+});
+
 test('payment voiding requires an in-page reason and recalculates the balance without deleting the payment', function () {
-    $user = User::factory()->create();
+    $user = User::factory()->owner()->create();
     $this->actingAs($user);
     $order = Order::factory()->create(['agreed_price' => '200.00']);
     $component = Volt::test('orders.show', ['order' => $order]);
@@ -103,7 +139,8 @@ test('payment voiding requires an in-page reason and recalculates the balance wi
         ->call('requestPaymentVoid', $payment->id)
         ->assertSet('showVoidForm', true)
         ->call('voidPayment')
-        ->assertHasErrors('voidReason');
+        ->assertHasErrors('voidReason')
+        ->assertSee('Indica el motivo de la anulación.');
 
     expect($payment->refresh()->status)->toBe(PaymentStatus::Registered);
 
@@ -125,7 +162,7 @@ test('payment voiding requires an in-page reason and recalculates the balance wi
 });
 
 test('agreed price cannot be reduced below active partial payments', function () {
-    $user = User::factory()->create();
+    $user = User::factory()->owner()->create();
     $this->actingAs($user);
     $order = Order::factory()->create(['agreed_price' => '200.00']);
 

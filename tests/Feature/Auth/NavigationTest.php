@@ -23,8 +23,7 @@ test('guests are redirected to login from every internal route', function () {
 });
 
 test('authenticated users can visit every navigation destination', function () {
-    $this->actingAs(User::factory()->create());
-    $this->withSession(['auth.password_confirmed_at' => now()->timestamp]);
+    $this->actingAs(User::factory()->owner()->create());
 
     $navigationRoutes = [
         'dashboard',
@@ -43,12 +42,24 @@ test('authenticated users can visit every navigation destination', function () {
     }
 });
 
+test('assistant can consult business modules but cannot open order creation', function () {
+    $assistant = User::factory()->assistant()->create();
+    $this->actingAs($assistant);
+
+    $this->get(route('dashboard'))->assertOk();
+    $this->get(route('orders.index'))->assertOk();
+    $this->get(route('customers.index'))->assertOk();
+    $this->get(route('catalogs.index'))->assertOk();
+    $this->get(route('history.index'))->assertOk();
+    $this->get(route('orders.create'))->assertForbidden();
+});
+
 test('order details remain protected by authentication', function () {
     $order = Order::factory()->create();
 
     $this->get(route('orders.show', $order))->assertRedirectToRoute('login');
 
-    $this->actingAs(User::factory()->create())
+    $this->actingAs(User::factory()->assistant()->create())
         ->get(route('orders.show', $order))
         ->assertOk();
 });

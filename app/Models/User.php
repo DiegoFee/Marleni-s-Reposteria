@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\UserRole;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -26,6 +27,11 @@ class User extends Authenticatable
         'password',
     ];
 
+    /** @var array<string, mixed> Atributos predeterminados del usuario. */
+    protected $attributes = [
+        'role' => UserRole::Assistant->value,
+    ];
+
     /**
      * The attributes that should be hidden for serialization.
      *
@@ -45,7 +51,13 @@ class User extends Authenticatable
     {
         return [
             'password' => 'hashed',
+            'role' => UserRole::class,
         ];
+    }
+
+    public function isOwner(): bool
+    {
+        return $this->role === UserRole::Owner;
     }
 
     public function ordersCreated(): HasMany

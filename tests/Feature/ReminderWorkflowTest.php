@@ -5,6 +5,7 @@ use App\Enums\ReminderWindow;
 use App\Models\ActivityLog;
 use App\Models\Order;
 use App\Models\Payment;
+use App\Models\User;
 use App\Services\Notifications\ReminderService;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Http\Client\Request;
@@ -88,6 +89,8 @@ test('sends audited reminders for both windows and excludes closed or expired or
             'event_type' => ActivityEventType::NotificationSent->value,
         ]);
     }
+
+    $this->actingAs(User::factory()->assistant()->create());
 
     Volt::test('orders.show', ['order' => $orderIn24Hours->refresh()])
         ->assertSee('Recordatorio enviado')

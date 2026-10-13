@@ -14,55 +14,71 @@ use App\Models\Customer;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\User;
+use App\Services\MoneyValidation;
 use App\Services\Notifications\ReminderService;
 use Brick\Math\BigDecimal;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class OrderService
 {
-    private const MAX_MONEY = '99999999.99';
-
     public function __construct(private ReminderService $notificationService) {}
 
     /**
-     * Crea un pedido, su anticipo inicial y la auditoria en una sola transaccion.
+     * Crea el cliente nuevo opcional, el pedido, su anticipo y el historial en una transaccion.
      *
      * @param  array<string, mixed>  $data
+     * @param  array{full_name: string, phone: string}|null  $newCustomerAttributes
      */
-    public function create(array $data, User $actor): Order
+    public function create(array $data, User $actor, ?array $newCustomerAttributes = null): Order
     {
-        $order = DB::transaction(function () use ($data, $actor): Order {
-            $captureMode = $this->captureMode($data['capture_mode']);
-            $agreedPrice = $this->money($data['agreed_price']);
-            $depositAmount = $this->money($data['deposit_amount'] ?? '0');
+        Gate::forUser($actor)->authorize('create', Order::class);
 
-            $this->validateCustomerSelection($data['customer_id'] ?? null);
+        if ($newCustomerAttributes !== null) {
+            Gate::forUser($actor)->authorize('create', Customer::class);
+
+            if (($data['customer_id'] ?? null) !== null) {
+                throw ValidationException::withMessages([
+                    'customerId' => 'Selecciona un cliente existente o registra uno nuevo, no ambos.',
+                ]);
+            }
+        }
+
+        $order = DB::transaction(function () use ($data, $actor, $newCustomerAttributes): Order {
+            $captureMode = $this->captureMode($data['capture_mode']);
+            $agreedPrice = MoneyValidation::requiredPositiveAmount($data['agreed_price'] ?? null, 'agreedPrice');
+            $depositAmount = MoneyValidation::optionalNonNegativeAmount($data['deposit_amount'] ?? null, 'depositAmount');
+            $deliveryAt = $this->validateDeliveryAt($data['delivery_at']);
+
+            if ($newCustomerAttributes === null) {
+                $this->validateCustomerSelection($data['customer_id'] ?? null);
+            }
+
             $this->validateCatalogSelection($captureMode, $data);
 
-            if ($agreedPrice->isLessThanOrEqualTo(0) || $agreedPrice->isGreaterThan(self::MAX_MONEY)) {
+            if ($depositAmount->isGreaterThan($agreedPrice)) {
                 throw ValidationException::withMessages([
-                    'agreedPrice' => 'El precio pactado debe estar entre 0.01 y 99,999,999.99.',
+                    'depositAmount' => trans('validation.custom.depositAmount.lte'),
                 ]);
             }
 
-            if ($depositAmount->isNegative() || $depositAmount->isGreaterThan(self::MAX_MONEY) || $depositAmount->isGreaterThan($agreedPrice)) {
-                throw ValidationException::withMessages([
-                    'depositAmount' => 'El anticipo debe estar entre cero y el precio pactado.',
-                ]);
-            }
+            $customerId = $newCustomerAttributes === null
+                ? $data['customer_id']
+                : Customer::query()->create($newCustomerAttributes)->getKey();
 
             $order = Order::query()->create([
                 'order_number' => $this->generateOrderNumber(),
-                'customer_id' => $data['customer_id'],
+                'customer_id' => $customerId,
                 'created_by' => $actor->id,
                 'capture_mode' => $captureMode,
                 'cake_category_id' => $captureMode === CaptureMode::Standard ? $data['cake_category_id'] : null,
                 'base_price_id' => $captureMode === CaptureMode::Standard ? $data['base_price_id'] : null,
                 'cake_description' => $captureMode === CaptureMode::Custom ? trim((string) $data['cake_description']) : null,
                 'agreed_price' => $agreedPrice->toScale(2)->toString(),
-                'delivery_at' => $data['delivery_at'],
+                'delivery_at' => $deliveryAt,
                 'status' => OrderStatus::Pending,
             ]);
 
@@ -114,6 +130,7 @@ class OrderService
                 ->whereKey($order->getKey())
                 ->lockForUpdate()
                 ->firstOrFail();
+            Gate::forUser($actor)->authorize('update', $lockedOrder);
 
             if ($lockedOrder->status !== OrderStatus::Pending) {
                 throw ValidationException::withMessages([
@@ -121,11 +138,9 @@ class OrderService
                 ]);
             }
 
+            $deliveryAt = $this->validateDeliveryAt($data['delivery_at'], $lockedOrder);
             $captureMode = $this->captureMode($data['capture_mode']);
-            $agreedPrice = $this->money($data['agreed_price']);
-            $status = $data['status'] instanceof OrderStatus
-                ? $data['status']
-                : OrderStatus::from((string) $data['status']);
+            $agreedPrice = MoneyValidation::requiredPositiveAmount($data['agreed_price'] ?? null, 'agreedPrice');
             $registeredPayments = $this->money(
                 Payment::query()
                     ->where('order_id', $lockedOrder->getKey())
@@ -136,27 +151,9 @@ class OrderService
             $this->validateCustomerSelection($data['customer_id'] ?? null);
             $this->validateCatalogSelection($captureMode, $data);
 
-            if ($agreedPrice->isLessThanOrEqualTo(0) || $agreedPrice->isGreaterThan(self::MAX_MONEY)) {
-                throw ValidationException::withMessages([
-                    'agreedPrice' => 'El precio pactado debe estar entre 0.01 y 99,999,999.99.',
-                ]);
-            }
-
             if ($agreedPrice->isLessThan($registeredPayments)) {
                 throw ValidationException::withMessages([
-                    'agreedPrice' => 'El precio pactado no puede ser menor que los pagos activos.',
-                ]);
-            }
-
-            if ($status === OrderStatus::Cancelled && $registeredPayments->isPositive()) {
-                throw ValidationException::withMessages([
-                    'status' => 'Anula primero los pagos activos antes de cancelar el pedido.',
-                ]);
-            }
-
-            if ($status === OrderStatus::Delivered && ! $registeredPayments->isEqualTo($agreedPrice)) {
-                throw ValidationException::withMessages([
-                    'status' => 'El pedido solo puede marcarse como entregado cuando el precio pactado esté pagado por completo.',
+                    'agreedPrice' => trans('validation.custom.agreedPrice.payments'),
                 ]);
             }
 
@@ -169,8 +166,7 @@ class OrderService
                 'base_price_id' => $captureMode === CaptureMode::Standard ? $data['base_price_id'] : null,
                 'cake_description' => $captureMode === CaptureMode::Custom ? trim((string) $data['cake_description']) : null,
                 'agreed_price' => $agreedPrice->toScale(2)->toString(),
-                'delivery_at' => $data['delivery_at'],
-                'status' => $status,
+                'delivery_at' => $deliveryAt,
             ]);
 
             if (! $lockedOrder->isDirty()) {
@@ -202,17 +198,69 @@ class OrderService
                 );
             }
 
-            if ($lockedOrder->wasChanged('status')) {
-                $this->recordActivity(
-                    order: $lockedOrder,
-                    actor: $actor,
-                    eventType: ActivityEventType::OrderStatusChanged,
-                    details: [
-                        'from' => $oldDetails['status'],
-                        'to' => $lockedOrder->status->value,
-                    ],
-                );
+            return $lockedOrder->fresh(['customer', 'cakeCategory', 'basePrice', 'payments', 'activityLogs']);
+        }, attempts: 3);
+    }
+
+    public function changeStatus(Order $order, OrderStatus $destination, User $actor, ?string $reason = null): Order
+    {
+        return DB::transaction(function () use ($order, $destination, $actor, $reason): Order {
+            $lockedOrder = Order::query()
+                ->whereKey($order->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+            Gate::forUser($actor)->authorize('changeStatus', $lockedOrder);
+
+            if ($lockedOrder->status !== OrderStatus::Pending) {
+                throw ValidationException::withMessages([
+                    'status' => 'Solo se puede cambiar el estado de un pedido pendiente y no archivado.',
+                ]);
             }
+
+            if (! in_array($destination, [OrderStatus::Delivered, OrderStatus::Cancelled], true)) {
+                throw ValidationException::withMessages([
+                    'status' => 'No se puede reabrir un pedido ni asignar ese estado.',
+                ]);
+            }
+
+            $registeredPayments = $this->money(
+                Payment::query()
+                    ->where('order_id', $lockedOrder->getKey())
+                    ->where('status', PaymentStatus::Registered->value)
+                    ->sum('amount'),
+            );
+
+            if ($destination === OrderStatus::Delivered && ! $registeredPayments->isEqualTo((string) $lockedOrder->agreed_price)) {
+                throw ValidationException::withMessages([
+                    'status' => 'El pedido solo puede marcarse como entregado cuando el precio pactado esté pagado por completo.',
+                ]);
+            }
+
+            if ($destination === OrderStatus::Cancelled && $registeredPayments->isPositive()) {
+                throw ValidationException::withMessages([
+                    'status' => 'Anula primero los pagos activos antes de cancelar el pedido.',
+                ]);
+            }
+
+            $previousStatus = $lockedOrder->status;
+            $lockedOrder->status = $destination;
+            $lockedOrder->save();
+
+            $details = [
+                'from' => $previousStatus->value,
+                'to' => $destination->value,
+            ];
+
+            if ($reason !== null) {
+                $details['reason'] = $reason;
+            }
+
+            $this->recordActivity(
+                order: $lockedOrder,
+                actor: $actor,
+                eventType: ActivityEventType::OrderStatusChanged,
+                details: $details,
+            );
 
             return $lockedOrder->fresh(['customer', 'cakeCategory', 'basePrice', 'payments', 'activityLogs']);
         }, attempts: 3);
@@ -228,6 +276,23 @@ class OrderService
     private function money(mixed $amount): BigDecimal
     {
         return BigDecimal::of(blank($amount) ? '0' : (string) $amount);
+    }
+
+    private function validateDeliveryAt(mixed $requestedDeliveryAt, ?Order $order = null): Carbon
+    {
+        $deliveryAt = Carbon::parse($requestedDeliveryAt);
+
+        if ($order !== null && $deliveryAt->format('Y-m-d\\TH:i') === $order->delivery_at->format('Y-m-d\\TH:i')) {
+            return $order->delivery_at;
+        }
+
+        if ($deliveryAt->lessThanOrEqualTo(now())) {
+            throw ValidationException::withMessages([
+                'deliveryAt' => trans('validation.custom.deliveryAt.after'),
+            ]);
+        }
+
+        return $deliveryAt;
     }
 
     /**

@@ -7,7 +7,7 @@ use App\Models\User;
 use Livewire\Volt\Volt;
 
 test('customer deletion is rejected while the customer has a pending order', function () {
-    $this->actingAs(User::factory()->create());
+    $this->actingAs(User::factory()->owner()->create());
     $customer = Customer::factory()->create();
     Order::factory()->for($customer)->create();
 
@@ -20,7 +20,7 @@ test('customer deletion is rejected while the customer has a pending order', fun
 });
 
 test('customer deletion keeps completed orders available', function () {
-    $this->actingAs(User::factory()->create());
+    $this->actingAs(User::factory()->owner()->create());
     $customer = Customer::factory()->create();
     $order = Order::factory()->delivered()->for($customer)->create();
 
@@ -34,7 +34,7 @@ test('customer deletion keeps completed orders available', function () {
 });
 
 test('customer deletion is rejected while any order has a registered payment', function () {
-    $user = User::factory()->create();
+    $user = User::factory()->owner()->create();
     $this->actingAs($user);
     $customer = Customer::factory()->create();
     $order = Order::factory()->delivered()->for($customer)->create();

@@ -24,20 +24,53 @@ test('authenticated users can search customers by name or phone', function () {
 });
 
 test('customers can be created from the customer page', function () {
-    $this->actingAs(User::factory()->create());
+    $this->actingAs(User::factory()->owner()->create());
 
     Volt::test('customers.index')
         ->call('startCreating')
-        ->set('fullName', 'Maria Garcia')
-        ->set('phone', '55551111')
+        ->set('customerContact.fullName', '  Maria Garcia  ')
+        ->set('customerContact.phone', ' 55551111 ')
         ->call('saveCustomer')
         ->assertHasNoErrors();
 
     expect(Customer::query()->where('full_name', 'Maria Garcia')->where('phone', '55551111')->exists())->toBeTrue();
 });
 
+test('order creation stages a normalized customer contact without persisting it', function () {
+    $this->actingAs(User::factory()->owner()->create());
+
+    Volt::test('orders.create')
+        ->set('showCustomerForm', true)
+        ->set('customerContact.fullName', '  María López  ')
+        ->set('customerContact.phone', ' 55551234 ')
+        ->call('selectNewCustomer')
+        ->assertHasNoErrors()
+        ->assertSet('showCustomerForm', false)
+        ->assertSet('newCustomerSelected', true)
+        ->assertSet('customerSearch', 'María López · 55551234');
+
+    expect(Customer::query()->count())->toBe(0);
+});
+
+test('order creation rejects a customer contact that is already in use', function () {
+    $this->actingAs(User::factory()->owner()->create());
+    Customer::factory()->create([
+        'full_name' => 'Cliente existente',
+        'phone' => '55550000',
+    ]);
+
+    Volt::test('orders.create')
+        ->set('showCustomerForm', true)
+        ->set('customerContact.fullName', 'Otro cliente')
+        ->set('customerContact.phone', '55550000')
+        ->call('selectNewCustomer')
+        ->assertHasErrors('customerContact.phone');
+
+    expect(Customer::query()->count())->toBe(1);
+});
+
 test('customers can be updated from the customer page', function () {
-    $this->actingAs(User::factory()->create());
+    $this->actingAs(User::factory()->owner()->create());
     $customer = Customer::factory()->create([
         'full_name' => 'Nombre anterior',
         'phone' => '55552222',
@@ -45,8 +78,8 @@ test('customers can be updated from the customer page', function () {
 
     Volt::test('customers.index')
         ->call('editCustomer', $customer->id)
-        ->set('fullName', 'Nombre actualizado')
-        ->set('phone', '55553333')
+        ->set('customerContact.fullName', 'Nombre actualizado')
+        ->set('customerContact.phone', '55553333')
         ->call('saveCustomer')
         ->assertHasNoErrors();
 
@@ -54,15 +87,31 @@ test('customers can be updated from the customer page', function () {
     expect($customer->phone)->toBe('55553333');
 });
 
+test('customers can be saved without changing their existing contact values', function () {
+    $this->actingAs(User::factory()->owner()->create());
+    $customer = Customer::factory()->create([
+        'full_name' => 'Contacto sin cambios',
+        'phone' => '55554444',
+    ]);
+
+    Volt::test('customers.index')
+        ->call('editCustomer', $customer->getKey())
+        ->call('saveCustomer')
+        ->assertHasNoErrors();
+
+    expect($customer->refresh()->full_name)->toBe('Contacto sin cambios');
+    expect($customer->phone)->toBe('55554444');
+});
+
 test('customer forms reject values that are empty after trimming', function () {
-    $this->actingAs(User::factory()->create());
+    $this->actingAs(User::factory()->owner()->create());
 
     Volt::test('customers.index')
         ->call('startCreating')
-        ->set('fullName', '   ')
-        ->set('phone', '   ')
+        ->set('customerContact.fullName', '   ')
+        ->set('customerContact.phone', '   ')
         ->call('saveCustomer')
-        ->assertHasErrors(['fullName', 'phone']);
+        ->assertHasErrors(['customerContact.fullName', 'customerContact.phone']);
 
     expect(Customer::query()->count())->toBe(0);
 });
@@ -76,7 +125,7 @@ test('customer searches reject unbounded input', function () {
 });
 
 test('customer forms require unique names and eight digit phone numbers', function () {
-    $this->actingAs(User::factory()->create());
+    $this->actingAs(User::factory()->owner()->create());
     Customer::factory()->create([
         'full_name' => 'Cliente existente',
         'phone' => '55550000',
@@ -84,8 +133,8 @@ test('customer forms require unique names and eight digit phone numbers', functi
 
     Volt::test('customers.index')
         ->call('startCreating')
-        ->set('fullName', 'Cliente existente')
-        ->set('phone', '1234567')
+        ->set('customerContact.fullName', 'Cliente existente')
+        ->set('customerContact.phone', '1234567')
         ->call('saveCustomer')
-        ->assertHasErrors(['fullName', 'phone']);
+        ->assertHasErrors(['customerContact.fullName', 'customerContact.phone']);
 });

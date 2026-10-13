@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Enums\UserRole;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
@@ -12,6 +13,13 @@ use Illuminate\Support\Str;
  */
 class UserFactory extends Factory
 {
+    public function configure(): static
+    {
+        return $this->afterMaking(function (User $user): void {
+            $user->role = UserRole::Assistant;
+        });
+    }
+
     /**
      * The current password being used by the factory.
      */
@@ -31,5 +39,19 @@ class UserFactory extends Factory
             'password' => static::$password ??= Hash::make('password'),
             'remember_token' => Str::random(10),
         ];
+    }
+
+    public function owner(): static
+    {
+        return $this->afterMaking(function (User $user): void {
+            $user->role = UserRole::Owner;
+        });
+    }
+
+    public function assistant(): static
+    {
+        return $this->afterMaking(function (User $user): void {
+            $user->role = UserRole::Assistant;
+        });
     }
 }

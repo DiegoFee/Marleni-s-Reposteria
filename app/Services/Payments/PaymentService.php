@@ -9,14 +9,14 @@ use App\Enums\PaymentType;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\User;
+use App\Services\MoneyValidation;
 use Brick\Math\BigDecimal;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 
 class PaymentService
 {
-    private const MAX_MONEY = '99999999.99';
-
     /**
      * Registra un pago y su auditoria con el pedido bloqueado.
      *
@@ -29,6 +29,7 @@ class PaymentService
                 ->whereKey($order->getKey())
                 ->lockForUpdate()
                 ->firstOrFail();
+            Gate::forUser($actor)->authorize('registerPayment', $lockedOrder);
 
             if ($lockedOrder->status !== OrderStatus::Pending) {
                 throw ValidationException::withMessages([
@@ -36,13 +37,7 @@ class PaymentService
                 ]);
             }
 
-            $amount = $this->money($data['amount'] ?? null);
-
-            if ($amount->isLessThanOrEqualTo(0) || $amount->isGreaterThan(self::MAX_MONEY)) {
-                throw ValidationException::withMessages([
-                    'paymentAmount' => 'El importe debe estar entre 0.01 y 99,999,999.99.',
-                ]);
-            }
+            $amount = MoneyValidation::requiredPositiveAmount($data['amount'] ?? null, 'paymentAmount');
 
             $registeredTotal = $this->registeredTotal($lockedOrder);
             $agreedPrice = $this->money($lockedOrder->agreed_price);
@@ -50,7 +45,7 @@ class PaymentService
 
             if ($newTotal->isGreaterThan($agreedPrice)) {
                 throw ValidationException::withMessages([
-                    'paymentAmount' => 'El pago no puede superar el saldo pendiente.',
+                    'paymentAmount' => trans('validation.custom.paymentAmount.balance'),
                 ]);
             }
 
@@ -94,6 +89,7 @@ class PaymentService
                 ->whereKey($paymentReference->order_id)
                 ->lockForUpdate()
                 ->firstOrFail();
+            Gate::forUser($actor)->authorize('voidPayment', $lockedOrder);
             $lockedPayment = Payment::query()
                 ->whereKey($paymentReference->getKey())
                 ->lockForUpdate()
@@ -114,7 +110,7 @@ class PaymentService
 
             if ($trimmedReason === '') {
                 throw ValidationException::withMessages([
-                    'voidReason' => 'Indica el motivo de la anulación.',
+                    'voidReason' => trans('validation.custom.voidReason.required'),
                 ]);
             }
 

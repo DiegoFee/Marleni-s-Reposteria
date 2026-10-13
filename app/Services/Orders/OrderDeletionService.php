@@ -2,22 +2,37 @@
 
 namespace App\Services\Orders;
 
+use App\Enums\OrderStatus;
 use App\Models\ActivityLog;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 
 class OrderDeletionService
 {
-    public function delete(Order $order): void
+    public function __construct(private OrderService $orderService) {}
+
+    public function delete(Order $order, User $actor): void
     {
-        DB::transaction(function () use ($order): void {
-            Order::query()
+        DB::transaction(function () use ($order, $actor): void {
+            $lockedOrder = Order::query()
                 ->whereKey($order->getKey())
                 ->lockForUpdate()
-                ->firstOrFail()
-                ->delete();
+                ->firstOrFail();
+            Gate::forUser($actor)->authorize('delete', $lockedOrder);
+
+            if ($lockedOrder->status === OrderStatus::Pending) {
+                $this->orderService->changeStatus(
+                    $lockedOrder,
+                    OrderStatus::Cancelled,
+                    $actor,
+                    reason: 'retired_to_history',
+                );
+            }
+
+            $lockedOrder->delete();
         }, attempts: 3);
     }
 
@@ -29,6 +44,7 @@ class OrderDeletionService
                 ->whereKey($order->getKey())
                 ->lockForUpdate()
                 ->firstOrFail();
+            Gate::forUser($actor)->authorize('forceDelete', $lockedOrder);
 
             DB::table('order_deletion_audits')->insert([
                 'order_number' => $lockedOrder->order_number,

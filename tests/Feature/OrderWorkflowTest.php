@@ -2,6 +2,7 @@
 
 use App\Enums\ActivityEventType;
 use App\Enums\CaptureMode;
+use App\Enums\OrderStatus;
 use App\Enums\PaymentStatus;
 use App\Enums\PaymentType;
 use App\Models\ActivityLog;
@@ -11,10 +12,12 @@ use App\Models\Customer;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\User;
+use App\Services\Orders\OrderService;
 use App\Services\Payments\PaymentService;
 use Database\Seeders\CatalogSeeder;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Validation\ValidationException;
 use Livewire\Volt\Volt;
 
 function orderFormData(Customer $customer, CakeCategory $category, BasePrice $basePrice): array
@@ -35,7 +38,7 @@ beforeEach(function (): void {
 
 test('standard orders preserve an overridden price and record their initial history', function () {
     $this->seed(CatalogSeeder::class);
-    $user = User::factory()->create();
+    $user = User::factory()->owner()->create();
     $this->actingAs($user);
     $customer = Customer::factory()->create();
     $category = CakeCategory::query()->firstOrFail();
@@ -67,9 +70,143 @@ test('standard orders preserve an overridden price and record their initial hist
     expect(ActivityLog::query()->where('order_id', $order->id)->where('event_type', ActivityEventType::PaymentRegistered->value)->exists())->toBeTrue();
 });
 
+test('order creation displays the localized required customer message', function () {
+    $this->actingAs(User::factory()->owner()->create());
+
+    Volt::test('orders.create')
+        ->set('captureMode', CaptureMode::Custom->value)
+        ->set('cakeDescription', 'Pastel personalizado')
+        ->set('agreedPrice', '275.00')
+        ->call('save')
+        ->assertHasErrors('customerId')
+        ->assertSee('El campo cliente es obligatorio.');
+
+    expect(Order::query()->count())->toBe(0);
+});
+
+test('new orders reject delivery times that are not strictly in the future', function () {
+    $this->seed(CatalogSeeder::class);
+    $this->travelTo(now()->setTime(12, 0));
+    $this->actingAs(User::factory()->owner()->create());
+    $customer = Customer::factory()->create();
+    $category = CakeCategory::query()->firstOrFail();
+    $basePrice = BasePrice::query()->firstOrFail();
+    $invalidDeliveryTimes = [
+        now()->subMinute()->format('Y-m-d\\TH:i'),
+        now()->format('Y-m-d\\TH:i'),
+    ];
+
+    foreach ($invalidDeliveryTimes as $deliveryAt) {
+        $component = Volt::test('orders.create');
+        foreach (orderFormData($customer, $category, $basePrice) as $property => $value) {
+            $component->set($property, $value);
+        }
+
+        $component
+            ->set('deliveryAt', $deliveryAt)
+            ->call('save')
+            ->assertHasErrors('deliveryAt')
+            ->assertSee('La fecha y hora de entrega debe ser posterior al momento actual.');
+    }
+
+    expect(Order::query()->count())->toBe(0);
+    expect(Payment::query()->count())->toBe(0);
+    expect(ActivityLog::query()->count())->toBe(0);
+});
+
+test('order service rejects a new delivery at the current moment', function () {
+    $this->travelTo(now()->setTime(12, 0));
+    $actor = User::factory()->owner()->create();
+    $customer = Customer::factory()->create();
+
+    expect(fn () => app(OrderService::class)->create([
+        'customer_id' => $customer->getKey(),
+        'capture_mode' => CaptureMode::Custom,
+        'cake_category_id' => null,
+        'base_price_id' => null,
+        'cake_description' => 'Pastel personalizado',
+        'agreed_price' => '275.00',
+        'delivery_at' => now(),
+        'deposit_amount' => '0',
+    ], $actor))->toThrow(ValidationException::class, 'La fecha y hora de entrega debe ser posterior al momento actual.');
+
+    expect(Order::query()->count())->toBe(0);
+    expect(Payment::query()->count())->toBe(0);
+    expect(ActivityLog::query()->count())->toBe(0);
+});
+
+test('saving an order persists its new customer and related records together', function () {
+    $this->seed(CatalogSeeder::class);
+    $user = User::factory()->owner()->create();
+    $this->actingAs($user);
+    $category = CakeCategory::query()->firstOrFail();
+    $basePrice = BasePrice::query()->firstOrFail();
+
+    $component = Volt::test('orders.create')
+        ->set('showCustomerForm', true)
+        ->set('customerContact.fullName', '  Cliente Nuevo  ')
+        ->set('customerContact.phone', ' 55551234 ')
+        ->call('selectNewCustomer')
+        ->assertHasNoErrors()
+        ->assertSet('newCustomerSelected', true);
+
+    expect(Customer::query()->count())->toBe(0);
+
+    $component
+        ->set('captureMode', CaptureMode::Standard->value)
+        ->set('cakeCategoryId', $category->id)
+        ->set('basePriceId', $basePrice->id)
+        ->set('agreedPrice', '180.00')
+        ->set('deliveryAt', now()->addDays(2)->format('Y-m-d H:i:s'))
+        ->set('depositAmount', '50.00')
+        ->call('save')
+        ->assertHasNoErrors();
+
+    $customer = Customer::query()->firstOrFail();
+    $order = Order::query()->firstOrFail();
+
+    expect($customer->full_name)->toBe('Cliente Nuevo');
+    expect($customer->phone)->toBe('55551234');
+    expect($order->customer_id)->toBe($customer->getKey());
+    expect($order->created_by)->toBe($user->getKey());
+    expect(Payment::query()->where('order_id', $order->getKey())->where('payment_type', PaymentType::Deposit->value)->value('amount'))->toBe('50.00');
+    expect(ActivityLog::query()->where('order_id', $order->getKey())->where('event_type', ActivityEventType::OrderCreated->value)->exists())->toBeTrue();
+    expect(ActivityLog::query()->where('order_id', $order->getKey())->where('event_type', ActivityEventType::PaymentRegistered->value)->exists())->toBeTrue();
+});
+
+test('a failed initial deposit insert rolls back its customer order and history', function () {
+    $this->seed(CatalogSeeder::class);
+    $user = User::factory()->owner()->create();
+    $category = CakeCategory::query()->firstOrFail();
+    $basePrice = BasePrice::query()->firstOrFail();
+
+    Payment::creating(function (Payment $payment): void {
+        throw new RuntimeException('The initial deposit insert failed.');
+    });
+
+    expect(fn () => app(OrderService::class)->create([
+        'customer_id' => null,
+        'capture_mode' => CaptureMode::Standard,
+        'cake_category_id' => $category->getKey(),
+        'base_price_id' => $basePrice->getKey(),
+        'cake_description' => null,
+        'agreed_price' => '180.00',
+        'delivery_at' => now()->addDays(2),
+        'deposit_amount' => '50.00',
+    ], $user, [
+        'full_name' => 'Cliente para rollback',
+        'phone' => '55554321',
+    ]))->toThrow(RuntimeException::class, 'The initial deposit insert failed.');
+
+    expect(Customer::query()->count())->toBe(0);
+    expect(Order::query()->count())->toBe(0);
+    expect(Payment::query()->count())->toBe(0);
+    expect(ActivityLog::query()->count())->toBe(0);
+});
+
 test('sends the order summary after registering a new order', function () {
     $this->seed(CatalogSeeder::class);
-    $user = User::factory()->create();
+    $user = User::factory()->owner()->create();
     $this->actingAs($user);
     $customer = Customer::factory()->create();
     $category = CakeCategory::query()->firstOrFail();
@@ -136,7 +273,7 @@ test('sends the order summary after registering a new order', function () {
 });
 
 test('keeps a new order when the summary provider rejects the message', function () {
-    $user = User::factory()->create();
+    $user = User::factory()->owner()->create();
     $this->actingAs($user);
     $customer = Customer::factory()->create();
     config()->set([
@@ -177,7 +314,7 @@ test('keeps a new order when the summary provider rejects the message', function
 });
 
 test('retries a failed order summary only after an explicit operator request', function () {
-    $user = User::factory()->create();
+    $user = User::factory()->owner()->create();
     $this->actingAs($user);
     $customer = Customer::factory()->create();
     $attempts = 0;
@@ -229,7 +366,7 @@ test('retries a failed order summary only after an explicit operator request', f
 });
 
 test('custom orders require a description and keep catalog references empty', function () {
-    $user = User::factory()->create();
+    $user = User::factory()->owner()->create();
     $this->actingAs($user);
     $customer = Customer::factory()->create();
 
@@ -257,7 +394,7 @@ test('custom orders require a description and keep catalog references empty', fu
 
 test('order validation rejects invalid modality combinations and excessive deposits', function () {
     $this->seed(CatalogSeeder::class);
-    $this->actingAs(User::factory()->create());
+    $this->actingAs(User::factory()->owner()->create());
     $customer = Customer::factory()->create();
     $category = CakeCategory::query()->firstOrFail();
     $basePrice = BasePrice::query()->firstOrFail();
@@ -271,13 +408,14 @@ test('order validation rejects invalid modality combinations and excessive depos
         ->set('deliveryAt', now()->addDay()->format('Y-m-d H:i:s'))
         ->set('depositAmount', '101.00')
         ->call('save')
-        ->assertHasErrors(['cakeCategoryId', 'basePriceId', 'cakeDescription', 'depositAmount']);
+        ->assertHasErrors(['cakeCategoryId', 'basePriceId', 'cakeDescription', 'depositAmount'])
+        ->assertSee('El anticipo no puede superar el precio pactado.');
 
     expect(Order::query()->count())->toBe(0);
 });
 
 test('standard orders require catalog references for their modality', function () {
-    $this->actingAs(User::factory()->create());
+    $this->actingAs(User::factory()->owner()->create());
     $customer = Customer::factory()->create();
 
     Volt::test('orders.create')
@@ -292,7 +430,7 @@ test('standard orders require catalog references for their modality', function (
 });
 
 test('custom orders reject descriptions that are empty after trimming', function () {
-    $user = User::factory()->create();
+    $user = User::factory()->owner()->create();
     $customer = Customer::factory()->create();
     $this->actingAs($user);
 
@@ -308,8 +446,26 @@ test('custom orders reject descriptions that are empty after trimming', function
     expect(Order::query()->count())->toBe(0);
 });
 
+test('an invalid order does not persist its staged new customer', function () {
+    $this->actingAs(User::factory()->owner()->create());
+
+    Volt::test('orders.create')
+        ->set('showCustomerForm', true)
+        ->set('customerContact.fullName', 'Cliente sin pedido')
+        ->set('customerContact.phone', '55555678')
+        ->set('captureMode', CaptureMode::Custom->value)
+        ->set('cakeDescription', 'Pastel personalizado')
+        ->set('agreedPrice', '100000000.00')
+        ->set('deliveryAt', now()->addDays(3)->format('Y-m-d H:i:s'))
+        ->call('save')
+        ->assertHasErrors('agreedPrice');
+
+    expect(Customer::query()->count())->toBe(0);
+    expect(Order::query()->count())->toBe(0);
+});
+
 test('order creation rejects a free-text customer that was not selected or registered', function () {
-    $user = User::factory()->create();
+    $user = User::factory()->owner()->create();
     $this->actingAs($user);
 
     Volt::test('orders.create')
@@ -326,7 +482,7 @@ test('order creation rejects a free-text customer that was not selected or regis
 
 test('order forms reject amounts above the database precision', function () {
     $this->seed(CatalogSeeder::class);
-    $user = User::factory()->create();
+    $user = User::factory()->owner()->create();
     $customer = Customer::factory()->create();
     $category = CakeCategory::query()->firstOrFail();
     $basePrice = BasePrice::query()->firstOrFail();
@@ -340,13 +496,97 @@ test('order forms reject amounts above the database precision', function () {
         ->set('agreedPrice', '100000000.00')
         ->set('deliveryAt', now()->addDays(3)->format('Y-m-d H:i:s'))
         ->call('save')
-        ->assertHasErrors('agreedPrice');
+        ->assertHasErrors('agreedPrice')
+        ->assertSee('El precio pactado no puede superar Q 99,999,999.99.');
 
     expect(Order::query()->count())->toBe(0);
 });
 
+test('order forms reject amounts with more than two decimal places', function () {
+    $user = User::factory()->owner()->create();
+    $customer = Customer::factory()->create();
+    $this->actingAs($user);
+
+    Volt::test('orders.create')
+        ->set('customerId', $customer->getKey())
+        ->set('captureMode', CaptureMode::Custom->value)
+        ->set('cakeDescription', 'Pastel personalizado')
+        ->set('agreedPrice', '275.001')
+        ->call('save')
+        ->assertHasErrors('agreedPrice')
+        ->assertSee('El precio pactado debe tener como máximo dos decimales.');
+
+    expect(Order::query()->count())->toBe(0);
+});
+
+test('creating and editing orders use the same maximum price validation message', function () {
+    $user = User::factory()->owner()->create();
+    $customer = Customer::factory()->create();
+    $this->actingAs($user);
+
+    Volt::test('orders.create')
+        ->set('customerId', $customer->getKey())
+        ->set('captureMode', CaptureMode::Custom->value)
+        ->set('cakeDescription', 'Pastel personalizado')
+        ->set('agreedPrice', '100000000.00')
+        ->call('save')
+        ->assertHasErrors('agreedPrice')
+        ->assertSee('El precio pactado no puede superar Q 99,999,999.99.');
+
+    expect(Order::query()->count())->toBe(0);
+
+    $order = Order::factory()->custom()->for($user, 'createdBy')->create();
+
+    Volt::test('orders.show', ['order' => $order])
+        ->call('startEditing')
+        ->set('agreedPrice', '100000000.00')
+        ->call('saveChanges')
+        ->assertHasErrors('agreedPrice')
+        ->assertSee('El precio pactado no puede superar Q 99,999,999.99.');
+
+    expect($order->refresh()->agreed_price)->toBe('150.00');
+});
+
+test('order service rejects prices with more than two decimal places', function () {
+    $user = User::factory()->owner()->create();
+    $customer = Customer::factory()->create();
+
+    expect(fn () => app(OrderService::class)->create([
+        'customer_id' => $customer->getKey(),
+        'capture_mode' => CaptureMode::Custom,
+        'cake_category_id' => null,
+        'base_price_id' => null,
+        'cake_description' => 'Pastel personalizado',
+        'agreed_price' => '275.001',
+        'delivery_at' => now()->addDay(),
+        'deposit_amount' => '0',
+    ], $user))->toThrow(ValidationException::class, 'El precio pactado debe tener como máximo dos decimales.');
+
+    expect(Order::query()->count())->toBe(0);
+    expect(Payment::query()->count())->toBe(0);
+});
+
+test('order service rejects initial deposits with more than two decimal places', function () {
+    $user = User::factory()->owner()->create();
+    $customer = Customer::factory()->create();
+
+    expect(fn () => app(OrderService::class)->create([
+        'customer_id' => $customer->getKey(),
+        'capture_mode' => CaptureMode::Custom,
+        'cake_category_id' => null,
+        'base_price_id' => null,
+        'cake_description' => 'Pastel personalizado',
+        'agreed_price' => '275.00',
+        'delivery_at' => now()->addDay(),
+        'deposit_amount' => '0.001',
+    ], $user))->toThrow(ValidationException::class, 'El anticipo debe tener como máximo dos decimales.');
+
+    expect(Order::query()->count())->toBe(0);
+    expect(Payment::query()->count())->toBe(0);
+});
+
 test('inactive catalog entries cannot be selected for standard orders', function () {
-    $this->actingAs(User::factory()->create());
+    $this->actingAs(User::factory()->owner()->create());
     $customer = Customer::factory()->create();
     $category = CakeCategory::factory()->inactive()->create();
     $basePrice = BasePrice::factory()->inactive()->create();
@@ -364,7 +604,7 @@ test('inactive catalog entries cannot be selected for standard orders', function
 
 test('order detail displays history and audits controlled edits', function () {
     $this->seed(CatalogSeeder::class);
-    $user = User::factory()->create();
+    $user = User::factory()->owner()->create();
     $this->actingAs($user);
     $customer = Customer::factory()->create();
     $category = CakeCategory::query()->firstOrFail();
@@ -387,11 +627,11 @@ test('order detail displays history and audits controlled edits', function () {
         ->assertSee('Pedido creado')
         ->assertSee('Se registró el pedido y su estado pendiente.')
         ->call('startEditing')
-        ->assertSee('¿Borrar pedido?')
+        ->assertSee('¿Retirar pedido al Historial?')
         ->set('deliveryAt', now()->addDays(4)->format('Y-m-d H:i:s'))
-        ->set('status', 'delivered')
-        ->call('confirmStatusChange')
         ->call('saveChanges')
+        ->call('requestStatusChange', 'delivered')
+        ->call('confirmStatusChange')
         ->assertHasNoErrors()
         ->assertSee('Pedido actualizado')
         ->assertSee('Estado actualizado');
@@ -403,9 +643,72 @@ test('order detail displays history and audits controlled edits', function () {
     expect($user->fresh())->not->toBeNull();
 });
 
+test('pending orders reject reprogramming a delivery to the present or past', function () {
+    $this->travelTo(now()->setTime(12, 0));
+    $user = User::factory()->owner()->create();
+    $order = Order::factory()
+        ->custom()
+        ->for($user, 'createdBy')
+        ->create(['delivery_at' => now()->addDay()]);
+    $originalDeliveryAt = $order->delivery_at->copy();
+    $this->actingAs($user);
+
+    Volt::test('orders.show', ['order' => $order])
+        ->call('startEditing')
+        ->set('deliveryAt', now()->format('Y-m-d\\TH:i'))
+        ->call('saveChanges')
+        ->assertHasErrors('deliveryAt')
+        ->assertSee('La fecha y hora de entrega debe ser posterior al momento actual.');
+
+    expect($order->refresh()->delivery_at->equalTo($originalDeliveryAt))->toBeTrue();
+    expect(ActivityLog::query()->where('order_id', $order->getKey())->where('event_type', ActivityEventType::OrderUpdated->value)->exists())->toBeFalse();
+});
+
+test('order service rejects reprogramming a pending order into the past', function () {
+    $this->travelTo(now()->setTime(12, 0));
+    $user = User::factory()->owner()->create();
+    $order = Order::factory()->custom()->for($user, 'createdBy')->create(['delivery_at' => now()->addDay()]);
+
+    expect(fn () => app(OrderService::class)->update($order, [
+        'customer_id' => $order->customer_id,
+        'capture_mode' => CaptureMode::Custom,
+        'cake_category_id' => null,
+        'base_price_id' => null,
+        'cake_description' => $order->cake_description,
+        'agreed_price' => (string) $order->agreed_price,
+        'delivery_at' => now()->subMinute(),
+    ], $user))->toThrow(ValidationException::class, 'La fecha y hora de entrega debe ser posterior al momento actual.');
+
+    expect($order->refresh()->delivery_at->isFuture())->toBeTrue();
+    expect(ActivityLog::query()->where('order_id', $order->getKey())->where('event_type', ActivityEventType::OrderUpdated->value)->exists())->toBeFalse();
+});
+
+test('editing an overdue order without rescheduling preserves its delivery time', function () {
+    $this->travelTo(now()->setTime(12, 0));
+    $user = User::factory()->owner()->create();
+    $originalDeliveryAt = now()->subDay()->setTime(11, 45, 37);
+    $order = Order::factory()
+        ->custom()
+        ->for($user, 'createdBy')
+        ->create(['delivery_at' => $originalDeliveryAt]);
+    $this->actingAs($user);
+
+    Volt::test('orders.show', ['order' => $order])
+        ->call('startEditing')
+        ->set('cakeDescription', 'Pastel actualizado sin cambiar entrega')
+        ->call('saveChanges')
+        ->assertHasNoErrors();
+
+    $updatedOrder = $order->refresh();
+
+    expect($updatedOrder->delivery_at->equalTo($originalDeliveryAt))->toBeTrue();
+    expect($updatedOrder->cake_description)->toBe('Pastel actualizado sin cambiar entrega');
+    expect(ActivityLog::query()->where('order_id', $order->getKey())->where('event_type', ActivityEventType::OrderUpdated->value)->exists())->toBeTrue();
+});
+
 test('order price cannot be reduced below registered payments during editing', function () {
     $this->seed(CatalogSeeder::class);
-    $user = User::factory()->create();
+    $user = User::factory()->owner()->create();
     $this->actingAs($user);
     $customer = Customer::factory()->create();
     $category = CakeCategory::query()->firstOrFail();
@@ -429,7 +732,7 @@ test('order price cannot be reduced below registered payments during editing', f
 });
 
 test('order details escape customer and cake text before rendering', function () {
-    $user = User::factory()->create();
+    $user = User::factory()->owner()->create();
     $customer = Customer::factory()->create([
         'full_name' => 'Cliente <script>xss()</script>',
     ]);
@@ -450,32 +753,21 @@ test('order details escape customer and cake text before rendering', function ()
 });
 
 test('orders cannot be marked delivered until the agreed price is fully paid', function () {
-    $this->seed(CatalogSeeder::class);
-    $user = User::factory()->create();
-    $customer = Customer::factory()->create();
-    $category = CakeCategory::query()->firstOrFail();
-    $basePrice = BasePrice::query()->firstOrFail();
-    $this->actingAs($user);
-
-    $component = Volt::test('orders.create');
-    foreach (orderFormData($customer, $category, $basePrice) as $property => $value) {
-        $component->set($property, $value);
-    }
-    $component->call('save');
-    $order = Order::query()->latest('id')->firstOrFail();
+    $owner = User::factory()->owner()->create();
+    $assistant = User::factory()->assistant()->create();
+    $order = Order::factory()->for($owner, 'createdBy')->create();
+    $this->actingAs($assistant);
 
     Volt::test('orders.show', ['order' => $order])
-        ->call('startEditing')
-        ->set('status', 'delivered')
+        ->call('requestStatusChange', 'delivered')
         ->call('confirmStatusChange')
-        ->call('saveChanges')
         ->assertHasErrors('status');
 
     expect($order->refresh()->status->value)->toBe('pending');
 });
 
 test('terminal orders cannot be edited after delivery', function () {
-    $user = User::factory()->create();
+    $user = User::factory()->owner()->create();
     $order = Order::factory()->delivered()->for($user, 'createdBy')->create();
     $this->actingAs($user);
 
@@ -489,26 +781,25 @@ test('terminal orders cannot be edited after delivery', function () {
 });
 
 test('terminal status changes require confirmation before saving', function () {
-    $user = User::factory()->create();
+    $user = User::factory()->owner()->create();
     $order = Order::factory()->for($user, 'createdBy')->create();
     $this->actingAs($user);
 
     $component = Volt::test('orders.show', ['order' => $order])
-        ->call('startEditing')
-        ->set('status', 'cancelled');
+        ->call('requestStatusChange', 'cancelled');
 
     $component
         ->assertSet('showStatusConfirmation', true)
-        ->assertSet('status', 'pending')
+        ->assertSet('pendingStatus', 'cancelled')
         ->call('cancelStatusChange')
         ->assertSet('showStatusConfirmation', false)
-        ->assertSet('status', 'pending');
+        ->assertSet('pendingStatus', null);
 
     expect($order->refresh()->status->value)->toBe('pending');
 });
 
 test('orders with active payments cannot be cancelled', function () {
-    $user = User::factory()->create();
+    $user = User::factory()->owner()->create();
     $order = Order::factory()->for($user, 'createdBy')->create();
     $this->actingAs($user);
 
@@ -518,19 +809,17 @@ test('orders with active payments cannot be cancelled', function () {
     ], $user);
 
     Volt::test('orders.show', ['order' => $order->refresh()])
-        ->call('startEditing')
-        ->set('status', 'cancelled')
+        ->call('requestStatusChange', 'cancelled')
         ->call('confirmStatusChange')
-        ->call('saveChanges')
         ->assertHasErrors('status');
 
     expect($order->refresh()->status->value)->toBe('pending');
 });
 
-test('pending orders can be deleted while their payments and history remain temporarily', function () {
-    $user = User::factory()->create();
+test('retiring pending orders without active payments cancels them while preserving payment history', function () {
+    $user = User::factory()->owner()->create();
     $order = Order::factory()->for($user, 'createdBy')->create();
-    $payment = Payment::factory()->for($order)->for($user, 'registeredBy')->create();
+    $payment = Payment::factory()->voided()->for($order)->for($user, 'registeredBy')->create();
     $this->actingAs($user);
 
     Volt::test('orders.show', ['order' => $order])
@@ -539,4 +828,38 @@ test('pending orders can be deleted while their payments and history remain temp
 
     $this->assertSoftDeleted($order);
     $this->assertDatabaseHas('payments', ['id' => $payment->id]);
+
+    $retiredOrder = Order::withTrashed()->findOrFail($order->getKey());
+    $statusEvent = ActivityLog::query()
+        ->where('order_id', $order->getKey())
+        ->where('event_type', ActivityEventType::OrderStatusChanged->value)
+        ->sole();
+
+    expect($retiredOrder->status)->toBe(OrderStatus::Cancelled);
+    expect($statusEvent->actor_user_id)->toBe($user->getKey());
+    expect($statusEvent->details)->toMatchArray([
+        'from' => OrderStatus::Pending->value,
+        'to' => OrderStatus::Cancelled->value,
+        'reason' => 'retired_to_history',
+    ]);
+});
+
+test('retiring a pending order with active payments is rejected until the payments are voided', function () {
+    $user = User::factory()->owner()->create();
+    $order = Order::factory()->for($user, 'createdBy')->create();
+    $payment = Payment::factory()->for($order)->for($user, 'registeredBy')->create();
+    $this->actingAs($user);
+
+    Volt::test('orders.show', ['order' => $order])
+        ->call('deleteOrder')
+        ->assertHasErrors('status')
+        ->assertSee('Anula primero los pagos activos antes de cancelar el pedido.');
+
+    expect($order->refresh()->status)->toBe(OrderStatus::Pending);
+    expect($payment->refresh()->status)->toBe(PaymentStatus::Registered);
+    $this->assertModelExists($order);
+    $this->assertDatabaseMissing('activity_logs', [
+        'order_id' => $order->getKey(),
+        'event_type' => ActivityEventType::OrderStatusChanged->value,
+    ]);
 });

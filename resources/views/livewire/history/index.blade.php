@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Gate;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Validate;
 use Livewire\Volt\Component;
@@ -101,8 +102,7 @@ new class extends Component {
 
     public function viewOrder(int $orderId): void
     {
-        $this->historyOrdersQuery()
-            ->findOrFail($orderId);
+        Gate::authorize('view', $this->historyOrdersQuery()->findOrFail($orderId));
 
         $this->viewingOrderId = $orderId;
         $this->showDetailModal = true;
@@ -118,8 +118,7 @@ new class extends Component {
 
     public function requestDelete(int $orderId): void
     {
-        $this->historyOrdersQuery()
-            ->findOrFail($orderId);
+        Gate::authorize('forceDelete', $this->historyOrdersQuery()->findOrFail($orderId));
 
         $this->deletingOrderId = $orderId;
         $this->showDeleteConfirmation = true;
@@ -133,12 +132,13 @@ new class extends Component {
 
     public function deleteOrder(OrderDeletionService $orderDeletionService): void
     {
+        $order = $this->historyOrdersQuery()
+            ->findOrFail($this->deletingOrderId);
+        Gate::authorize('forceDelete', $order);
+
         if (! $this->ensurePasswordConfirmation()) {
             return;
         }
-
-        $order = $this->historyOrdersQuery()
-            ->findOrFail($this->deletingOrderId);
 
         $actor = Auth::user();
 
@@ -209,7 +209,11 @@ new class extends Component {
         return match ($eventType) {
             ActivityEventType::OrderCreated => __('Pedido creado'),
             ActivityEventType::OrderUpdated => __('Pedido actualizado'),
-            ActivityEventType::OrderStatusChanged => __('Estado actualizado'),
+            ActivityEventType::OrderStatusChanged => match ($activityLog?->details['reason'] ?? null) {
+                'retired_to_history' => __('Pedido retirado al Historial'),
+                'archived_pending_repair' => __('Pedido archivado regularizado'),
+                default => __('Estado actualizado'),
+            },
             ActivityEventType::PaymentRegistered => ($activityLog?->details['payment_type'] ?? PaymentType::Deposit->value) === PaymentType::Deposit->value
                 ? __('Anticipo registrado')
                 : __('Pago registrado'),
@@ -228,7 +232,7 @@ new class extends Component {
         return match ($activityLog->event_type) {
             ActivityEventType::OrderCreated => __('Se registró el pedido y su estado pendiente.'),
             ActivityEventType::OrderUpdated => __('Campos actualizados: ').implode(', ', array_map(fn (string $field): string => $this->orderFieldLabel($field), $activityLog->details['fields'] ?? [])),
-            ActivityEventType::OrderStatusChanged => __('Cambio de ').$this->orderStatusLabel((string) ($activityLog->details['from'] ?? '')).__(' a ').$this->orderStatusLabel((string) ($activityLog->details['to'] ?? '')),
+            ActivityEventType::OrderStatusChanged => $this->orderStatusChangeSummary($activityLog),
             ActivityEventType::PaymentRegistered => $this->paymentTypeActivitySummary($activityLog),
             ActivityEventType::PaymentVoided => __('Pago de Q ').($activityLog->details['amount'] ?? '0.00').' '.__('anulado: ').($activityLog->details['void_reason'] ?? ''),
             ActivityEventType::NotificationSent => ($activityLog->details['notification_type'] ?? null) === NotificationMessageType::OrderCreatedSummary->value
@@ -237,6 +241,17 @@ new class extends Component {
             ActivityEventType::NotificationFailed => ($activityLog->details['notification_type'] ?? null) === NotificationMessageType::OrderCreatedSummary->value
                 ? __('No se pudo enviar el resumen del pedido.')
                 : __('No se pudo enviar el recordatorio.'),
+        };
+    }
+
+    private function orderStatusChangeSummary(ActivityLog $activityLog): string
+    {
+        $summary = __('Cambio de ').$this->orderStatusLabel((string) ($activityLog->details['from'] ?? '')).__(' a ').$this->orderStatusLabel((string) ($activityLog->details['to'] ?? ''));
+
+        return match ($activityLog->details['reason'] ?? null) {
+            'retired_to_history' => $summary.__(' al retirar el pedido al Historial.'),
+            'archived_pending_repair' => $summary.__(' durante la regularización de pedidos archivados.'),
+            default => $summary,
         };
     }
 
@@ -344,8 +359,11 @@ new class extends Component {
                 {{ __('Historial') }}
             </h1>
             <p class="max-w-2xl text-sm text-brand-700 dark:text-brand-200">
-                {{ __('Consulta los pedidos entregados y los pedidos archivados hasta eliminarlos definitivamente.') }}
+                {{ __('Consulta los pedidos entregados y retirados. El retiro conserva pagos y actividad; el borrado definitivo elimina sus datos operativos.') }}
             </p>
+            @cannot('manage-accounts')
+                <p class="max-w-2xl text-sm text-brand-700 dark:text-brand-200">{{ __('Tu rol permite consultar el historial, pero no eliminar pedidos definitivamente.') }}</p>
+            @endcannot
         </div>
     </header>
 
@@ -361,8 +379,8 @@ new class extends Component {
         <div class="overflow-hidden rounded-2xl border border-brand-200 bg-white shadow-sm dark:border-brand-800 dark:bg-brand-900/50">
                 @if ($this->orders->isEmpty())
                     <div class="p-8 text-center">
-                    <p class="font-semibold text-brand-950 dark:text-brand-50">{{ __('No hay pedidos entregados o archivados para mostrar.') }}</p>
-                    <p class="mt-2 text-sm text-brand-700 dark:text-brand-200">{{ __('Los pedidos aparecerán aquí cuando tengan estado Entregado o se archiven desde Pedidos.') }}</p>
+                    <p class="font-semibold text-brand-950 dark:text-brand-50">{{ __('No hay pedidos entregados o retirados para mostrar.') }}</p>
+                    <p class="mt-2 text-sm text-brand-700 dark:text-brand-200">{{ __('Los pedidos aparecerán aquí cuando se entreguen o se retiren desde Pedidos.') }}</p>
                 </div>
             @else
                 <div class="overflow-x-auto">
@@ -393,7 +411,7 @@ new class extends Component {
                                         <div class="flex flex-wrap gap-2">
                                             <flux:badge color="{{ $this->statusBadgeColor($order->status) }}">{{ $this->statusLabel($order->status) }}</flux:badge>
                                             @if ($order->trashed())
-                                                <flux:badge color="zinc">{{ __('Eliminado de Pedidos') }}</flux:badge>
+                                                <flux:badge color="zinc">{{ __('Retirado de Pedidos') }}</flux:badge>
                                             @endif
                                         </div>
                                     </td>
@@ -402,9 +420,13 @@ new class extends Component {
                                             <flux:button wire:click="viewOrder({{ $order->id }})" variant="ghost" size="sm" tooltip="{{ __('Ver todos los datos del pedido') }}">
                                                 {{ __('Ver detalle') }}
                                             </flux:button>
-                                            <flux:button wire:click="requestDelete({{ $order->id }})" variant="danger" size="sm" class="marleni-danger-button" tooltip="{{ __('Eliminar definitivamente este pedido del historial') }}">
-                                                {{ __('Borrar') }}
-                                            </flux:button>
+                                            @can('forceDelete', $order)
+                                                <flux:button wire:click="requestDelete({{ $order->id }})" variant="danger" size="sm" class="marleni-danger-button" tooltip="{{ __('Eliminar definitivamente este pedido del historial') }}">
+                                                    {{ __('Borrar definitivamente') }}
+                                                </flux:button>
+                                            @else
+                                                <span class="text-sm text-brand-600 dark:text-brand-300">{{ __('Solo consulta') }}</span>
+                                            @endcan
                                         </div>
                                     </td>
                                 </tr>
@@ -430,7 +452,7 @@ new class extends Component {
                             <h2 class="font-display text-2xl font-semibold text-brand-950 dark:text-brand-50">{{ $this->selectedOrder->order_number }}</h2>
                             <flux:badge color="{{ $this->statusBadgeColor($this->selectedOrder->status) }}">{{ $this->statusLabel($this->selectedOrder->status) }}</flux:badge>
                             @if ($this->selectedOrder->trashed())
-                                <flux:badge color="zinc">{{ __('Eliminado de Pedidos') }}</flux:badge>
+                                <flux:badge color="zinc">{{ __('Retirado de Pedidos') }}</flux:badge>
                             @endif
                         </div>
                         <p class="text-sm text-brand-700 dark:text-brand-200">{{ __('Creado el') }} {{ $this->formatDate($this->selectedOrder->created_at) }}</p>
@@ -531,9 +553,7 @@ new class extends Component {
                                     <div>
                                         <p class="font-semibold text-brand-950 dark:text-brand-50">{{ $this->eventLabel($activityLog->event_type, $activityLog) }}</p>
                                         <p class="mt-1 text-sm text-brand-700 dark:text-brand-200">{{ $this->activitySummary($activityLog) }}</p>
-                                        @if ($activityLog->actorUser)
-                                            <p class="mt-2 text-xs text-brand-600 dark:text-brand-300">{{ __('Responsable') }}: {{ $activityLog->actorUser->name }}</p>
-                                        @endif
+                                            <p class="mt-2 text-xs text-brand-600 dark:text-brand-300">{{ __('Responsable') }}: {{ $activityLog->actorUser?->name ?? __('Sistema') }}</p>
                                     </div>
                                     <time class="shrink-0 text-xs text-brand-600 dark:text-brand-300">{{ $this->formatDate($activityLog->created_at) }}</time>
                                 </li>
@@ -549,12 +569,13 @@ new class extends Component {
         @endif
     </flux:modal>
 
+    @can('manage-accounts')
     <flux:modal wire:model="showDeleteConfirmation" focusable class="max-w-lg border border-brand-200 bg-brand-50 dark:border-brand-700 dark:bg-brand-950">
         <div class="flex flex-col gap-5 text-base">
             <div class="flex items-start gap-4">
                 <div class="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-brand-800 text-xl font-bold text-white shadow-lg shadow-brand-900/20">!</div>
                 <div>
-                    <flux:heading size="lg" class="font-display text-brand-950 dark:text-brand-50">{{ __('¿Borrar del historial?') }}</flux:heading>
+                    <flux:heading size="lg" class="font-display text-brand-950 dark:text-brand-50">{{ __('¿Borrar definitivamente del historial?') }}</flux:heading>
                     <p class="mt-2 text-base leading-6 text-brand-700 dark:text-brand-200">{{ __('Se eliminarán el pedido, sus pagos y eventos. No se puede deshacer.') }}</p>
                 </div>
             </div>
@@ -564,9 +585,10 @@ new class extends Component {
                     {{ __('Cancelar') }}
                 </flux:button>
                 <flux:button wire:click="deleteOrder" type="button" variant="danger" class="marleni-danger-button" tooltip="{{ __('Confirmar la eliminación definitiva') }}">
-                    {{ __('Borrar') }}
+                    {{ __('Borrar definitivamente') }}
                 </flux:button>
             </div>
         </div>
     </flux:modal>
+    @endcan
 </div>

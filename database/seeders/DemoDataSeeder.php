@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Enums\CaptureMode;
+use App\Enums\UserRole;
 use App\Models\BasePrice;
 use App\Models\CakeCategory;
 use App\Models\Customer;
@@ -22,7 +23,10 @@ class DemoDataSeeder extends Seeder
 
     public function run(): void
     {
-        $admin = User::query()->oldest('id')->first();
+        $admin = User::query()
+            ->where('username', config('admin.username'))
+            ->where('role', UserRole::Owner->value)
+            ->first();
 
         if ($admin === null) {
             throw new RuntimeException('Crea primero la administradora con ADMIN_USERNAME y ADMIN_PASSWORD.');
