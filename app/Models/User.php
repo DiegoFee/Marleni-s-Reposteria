@@ -27,7 +27,7 @@ class User extends Authenticatable
         'password',
     ];
 
-    /** @var array<string, mixed> Atributos predeterminados del usuario. */
+    /** @var array<string, mixed> Descripcion: Usa el rol de asistente cuando no se asigna otro rol. */
     protected $attributes = [
         'role' => UserRole::Assistant->value,
     ];

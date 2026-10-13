@@ -7,7 +7,6 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /** Ejecuta la migracion. */
     public function up(): void
     {
         Schema::table('users', function (Blueprint $table) {
@@ -17,13 +16,15 @@ return new class extends Migration
         $adminUsername = config('admin.username');
 
         if (filled($adminUsername)) {
+            // -----------------------------------------------------------
+            // Logica critica: Asigna el rol de propietaria a la cuenta administradora existente para conservar su acceso.
+            // -----------------------------------------------------------
             DB::table('users')
                 ->where('username', $adminUsername)
                 ->update(['role' => 'owner']);
         }
     }
 
-    /** Revierte la migracion. */
     public function down(): void
     {
         Schema::table('users', function (Blueprint $table) {

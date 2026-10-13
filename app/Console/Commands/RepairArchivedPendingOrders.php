@@ -16,6 +16,13 @@ class RepairArchivedPendingOrders extends Command
 
     protected $description = 'Corrige pedidos archivados que conservan el estado Pendiente';
 
+    /**
+     * Funcion: handle()
+     *
+     * Descripcion: Muestra una simulacion por defecto y solo cambia datos cuando se solicita la opcion --apply.
+     *
+     * Version: 1.0
+     */
     public function handle(): int
     {
         $archivedPendingOrders = $this->archivedPendingOrders();
@@ -72,6 +79,13 @@ class RepairArchivedPendingOrders extends Command
             ->where('status', OrderStatus::Pending->value);
     }
 
+    /**
+     * Funcion: repairArchivedPendingOrder()
+     *
+     * Descripcion: Bloquea y vuelve a validar cada pedido antes de cancelar y registrar la reparacion en una transaccion.
+     *
+     * Version: 1.0
+     */
     private function repairArchivedPendingOrder(int $orderId): bool
     {
         return DB::transaction(function () use ($orderId): bool {

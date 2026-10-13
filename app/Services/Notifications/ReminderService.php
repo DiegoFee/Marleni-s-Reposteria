@@ -128,6 +128,9 @@ final class ReminderService
     ): int {
         $sentCount = 0;
 
+        // -----------------------------------------------------------
+        // Logica critica: Excluye fallos con confirmacion de envio para no repetir notificaciones ya completadas.
+        // -----------------------------------------------------------
         $failedNotifications = ActivityLog::query()
             ->where('event_type', ActivityEventType::NotificationFailed->value)
             ->where('notification_channel', $channel->value)
@@ -226,6 +229,9 @@ final class ReminderService
             return false;
         }
 
+        // -----------------------------------------------------------
+        // Logica critica: El bloqueo serializa los envios con la misma clave y evita duplicados entre ejecuciones simultaneas.
+        // -----------------------------------------------------------
         $lock = Cache::lock('order-reminder:'.$notificationKey, 120);
 
         if (! $lock->get()) {

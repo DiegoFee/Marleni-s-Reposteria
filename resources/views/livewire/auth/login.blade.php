@@ -20,7 +20,11 @@ new #[Layout('components.layouts.auth')] class extends Component {
     public bool $remember = false;
 
     /**
-     * Gestiona una solicitud de autenticación.
+     * Funcion: login()
+     *
+     * Descripcion: Valida las credenciales, limita intentos fallidos y regenera la sesion cuando la autenticacion es correcta.
+     *
+     * Version: 1.0
      */
     public function login(): void
     {
@@ -44,7 +48,11 @@ new #[Layout('components.layouts.auth')] class extends Component {
     }
 
     /**
-     * Verifica que la solicitud de autenticación no esté limitada por frecuencia.
+     * Funcion: ensureIsNotRateLimited()
+     *
+     * Descripcion: Bloquea nuevos intentos y emite el evento Lockout cuando se supera el limite permitido.
+     *
+     * Version: 1.0
      */
     protected function ensureIsNotRateLimited(): void
     {
@@ -65,7 +73,11 @@ new #[Layout('components.layouts.auth')] class extends Component {
     }
 
     /**
-     * Obtiene la clave de limitación de frecuencia de autenticación.
+     * Funcion: throttleKey()
+     *
+     * Descripcion: Combina el usuario y la direccion IP en una clave normalizada para limitar intentos por origen.
+     *
+     * Version: 1.0
      */
     protected function throttleKey(): string
     {
@@ -76,14 +88,11 @@ new #[Layout('components.layouts.auth')] class extends Component {
 <div class="flex flex-col gap-7 font-sans text-base">
     <x-auth-header title="Bienvenida a tu panel" description="Ingresa tus credenciales para continuar" />
 
-    <!-- Estado de la sesión -->
     <x-auth-session-status class="text-center" :status="session('status')" />
 
     <form wire:submit="login" class="flex flex-col gap-6 rounded-3xl border border-brand-200/80 bg-white/75 p-6 text-base shadow-xl shadow-brand-900/5 backdrop-blur-sm sm:p-8 dark:border-brand-800 dark:bg-brand-900/55 dark:shadow-black/20">
-        <!-- Nombre de usuario -->
         <flux:input wire:model="username" label="{{ __('Nombre de usuario') }}" type="text" name="username" required autofocus autocomplete="username" placeholder="Usuario" class="text-base" />
 
-        <!-- Contraseña -->
         <flux:input
             wire:model="password"
             label="{{ __('Contraseña') }}"
@@ -95,7 +104,6 @@ new #[Layout('components.layouts.auth')] class extends Component {
             class="text-base"
         />
 
-        <!-- Recordarme -->
         <flux:checkbox wire:model="remember" label="{{ __('Recordarme') }}" title="{{ __('Mantener la sesión iniciada en este dispositivo') }}" />
 
         <div class="flex justify-center pt-1">

@@ -57,7 +57,9 @@ document.addEventListener('alpine:init', () => {
 
                 this.sidebarHidden = window.localStorage.getItem('marleni-sidebar-hidden') === 'true';
             } catch {
-                // Private browsing modes can block localStorage without affecting navigation.
+                // -----------------------------------------------------------
+                // Logica critica: La navegacion sigue disponible aunque el navegador bloquee localStorage.
+                // -----------------------------------------------------------
             }
         },
 
@@ -73,7 +75,9 @@ document.addEventListener('alpine:init', () => {
             try {
                 window.localStorage.setItem('marleni-sidebar-width', String(this.sidebarWidth));
             } catch {
-                // The sidebar remains usable when storage is unavailable.
+                // -----------------------------------------------------------
+                // Logica critica: El ancho ajustado se mantiene en la pagina actual aunque falle localStorage.
+                // -----------------------------------------------------------
             }
         },
 
@@ -115,7 +119,9 @@ document.addEventListener('alpine:init', () => {
             try {
                 window.localStorage.setItem('marleni-sidebar-hidden', 'true');
             } catch {
-                // The reveal handle remains available for the current page.
+                // -----------------------------------------------------------
+                // Logica critica: El control para volver a mostrar la barra sigue disponible en esta pagina.
+                // -----------------------------------------------------------
             }
         },
 
@@ -125,7 +131,9 @@ document.addEventListener('alpine:init', () => {
             try {
                 window.localStorage.setItem('marleni-sidebar-hidden', 'false');
             } catch {
-                // The sidebar can still be reopened for the current page.
+                // -----------------------------------------------------------
+                // Logica critica: La barra puede volver a abrirse en esta pagina aunque no se guarde el cambio.
+                // -----------------------------------------------------------
             }
         },
     }));

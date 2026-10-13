@@ -175,7 +175,3 @@ select:focus[data-flux-control] {
 [wire\:loading] {
     cursor: wait;
 }
-
-/* \[:where(&)\]:size-4 {
-    @apply size-4;
-} */

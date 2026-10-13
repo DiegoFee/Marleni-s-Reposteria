@@ -11,7 +11,11 @@ new #[Layout('components.layouts.auth')] class extends Component {
     public string $password = '';
 
     /**
-     * Confirma la contraseña del usuario actual.
+     * Funcion: confirmPassword()
+     *
+     * Descripcion: Valida de nuevo la contrasena antes de confirmar la sesion y permitir el acceso a operaciones seguras.
+     *
+     * Version: 1.0
      */
     public function confirmPassword(): void
     {
@@ -66,11 +70,9 @@ new #[Layout('components.layouts.auth')] class extends Component {
          description="Esta es un área segura. Confirma tu contraseña antes de continuar."
     />
 
-    <!-- Estado de la sesión -->
     <x-auth-session-status class="text-center" :status="session('status')" />
 
     <form wire:submit="confirmPassword" class="flex flex-col gap-6">
-        <!-- Contraseña -->
         <div class="grid gap-2">
             <flux:input
                 wire:model="password"

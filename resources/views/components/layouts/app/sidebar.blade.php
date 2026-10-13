@@ -76,7 +76,7 @@
                 </p>
             </div>
 
-            <!-- Menú de usuario de escritorio -->
+            {{-- Descripcion: Opciones de cuenta disponibles desde la barra lateral de escritorio. --}}
             <flux:dropdown position="bottom" align="start">
                 <flux:profile
                     :name="auth()->user()->name"
@@ -142,7 +142,7 @@
             </button>
         </div>
 
-        <!-- Menú de usuario móvil -->
+        {{-- Descripcion: Barra superior y acciones de cuenta para pantallas moviles. --}}
         <flux:header class="border-b border-brand-200 bg-white/95 shadow-sm backdrop-blur lg:hidden dark:border-brand-800 dark:bg-brand-950/95">
             <flux:sidebar.toggle class="lg:hidden" icon="bars-2" inset="left" aria-label="{{ __('Abrir menú lateral') }}" title="{{ __('Abrir menú lateral') }}" />
 

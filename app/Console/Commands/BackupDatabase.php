@@ -15,6 +15,13 @@ class BackupDatabase extends Command
 
     protected $description = 'Crea un respaldo SQL de la base de datos en un directorio privado.';
 
+    /**
+     * Funcion: handle()
+     *
+     * Descripcion: Crea un respaldo fuera de public, restringe sus permisos y elimina archivos temporales o incompletos ante un error.
+     *
+     * Version: 1.0
+     */
     public function handle(): int
     {
         $connectionName = (string) config('database.default');
@@ -115,6 +122,13 @@ class BackupDatabase extends Command
             && ($path === $publicDirectory || str_starts_with($path, $publicDirectory.DIRECTORY_SEPARATOR));
     }
 
+    /**
+     * Funcion: assertOutsidePublicDirectory()
+     *
+     * Descripcion: Resuelve la ruta existente mas cercana para detectar directorios aun no creados que terminarian dentro de public.
+     *
+     * Version: 1.0
+     */
     private function assertOutsidePublicDirectory(string $path): void
     {
         $candidate = $path;
@@ -157,6 +171,12 @@ class BackupDatabase extends Command
     }
 
     /**
+     * Funcion: createCredentialsFile()
+     *
+     * Descripcion: Guarda credenciales en un archivo temporal privado para no exponerlas como argumentos del proceso.
+     *
+     * Version: 1.0
+     *
      * @param  array<string, mixed>  $connection
      */
     private function createCredentialsFile(string $directory, array $connection): string
@@ -199,6 +219,12 @@ class BackupDatabase extends Command
     }
 
     /**
+     * Funcion: runDump()
+     *
+     * Descripcion: Ejecuta el volcado con argumentos separados y transmite la salida al archivo para evitar cargarla completa en memoria.
+     *
+     * Version: 1.0
+     *
      * @param  array<string, mixed>  $connection
      */
     private function runDump(array $connection, string $credentialsPath, string $backupPath): int

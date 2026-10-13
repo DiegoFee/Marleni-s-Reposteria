@@ -13,6 +13,13 @@ use Illuminate\Support\Facades\Gate;
 
 class OrderDeletionService
 {
+    /**
+     * Funcion: delete()
+     *
+     * Descripcion: Archiva el pedido y, si esta pendiente, lo cancela sin borrar sus pagos ni su actividad.
+     *
+     * Version: 1.0
+     */
     public function delete(Order $order, User $actor): void
     {
         DB::transaction(function () use ($order, $actor): void {
@@ -22,6 +29,9 @@ class OrderDeletionService
                 ->firstOrFail();
             Gate::forUser($actor)->authorize('delete', $lockedOrder);
 
+            // -----------------------------------------------------------
+            // Logica critica: Registra la cancelacion antes del archivo para conservar el cambio en el historial del pedido.
+            // -----------------------------------------------------------
             if ($lockedOrder->status === OrderStatus::Pending) {
                 $lockedOrder->status = OrderStatus::Cancelled;
                 $lockedOrder->save();
@@ -42,6 +52,13 @@ class OrderDeletionService
         }, attempts: 3);
     }
 
+    /**
+     * Funcion: forceDelete()
+     *
+     * Descripcion: Guarda una copia auditable y elimina definitivamente el pedido y sus registros relacionados en una transaccion.
+     *
+     * Version: 1.0
+     */
     public function forceDelete(Order $order, User $actor): void
     {
         DB::transaction(function () use ($order, $actor): void {
@@ -52,6 +69,9 @@ class OrderDeletionService
                 ->firstOrFail();
             Gate::forUser($actor)->authorize('forceDelete', $lockedOrder);
 
+            // -----------------------------------------------------------
+            // Logica critica: Guarda la evidencia antes de borrar pagos y actividad; la transaccion evita una eliminacion parcial.
+            // -----------------------------------------------------------
             DB::table('order_deletion_audits')->insert([
                 'order_number' => $lockedOrder->order_number,
                 'actor_user_id' => $actor->getKey(),

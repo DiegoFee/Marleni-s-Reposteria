@@ -16,6 +16,13 @@ final class CustomerContactData
         return preg_replace('/\s+/u', ' ', $trimmedName) ?? $trimmedName;
     }
 
+    /**
+     * Funcion: normalizePhone()
+     *
+     * Descripcion: Quita separadores solo en telefonos de ocho digitos para conservar los ceros iniciales y dejar que la validacion rechace otros formatos.
+     *
+     * Version: 1.0
+     */
     public static function normalizePhone(string $phone): string
     {
         $trimmedPhone = trim($phone);

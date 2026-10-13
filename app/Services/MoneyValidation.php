@@ -84,6 +84,13 @@ final class MoneyValidation
         return $amount;
     }
 
+    /**
+     * Funcion: parseAmount()
+     *
+     * Descripcion: Convierte el importe a decimal exacto y rechaza mas de dos decimales en lugar de redondear pagos.
+     *
+     * Version: 1.0
+     */
     private static function parseAmount(mixed $value, string $attribute): BigDecimal
     {
         if (! is_numeric($value)) {

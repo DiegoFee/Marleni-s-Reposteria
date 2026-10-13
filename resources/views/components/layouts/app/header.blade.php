@@ -39,7 +39,7 @@
                 </flux:tooltip>
             </flux:navbar>
 
-            <!-- Menú de usuario de escritorio -->
+            {{-- Descripcion: Opciones de cuenta disponibles desde la barra de escritorio. --}}
             <flux:dropdown position="top" align="end">
                 <flux:profile
                     class="cursor-pointer"
@@ -85,7 +85,7 @@
             </flux:dropdown>
         </flux:header>
 
-        <!-- Menú móvil -->
+        {{-- Descripcion: Navegacion y acciones de cuenta para pantallas moviles. --}}
         <flux:sidebar stashable sticky class="border-r border-brand-200 bg-white lg:hidden dark:border-brand-800 dark:bg-brand-950">
             <flux:sidebar.toggle class="lg:hidden" icon="x-mark" aria-label="{{ __('Cerrar menú lateral') }}" title="{{ __('Cerrar menú lateral') }}" />
 

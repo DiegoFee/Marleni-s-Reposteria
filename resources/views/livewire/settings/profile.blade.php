@@ -6,16 +6,17 @@ use Livewire\Volt\Component;
 new class extends Component {
     public string $name = '';
 
-    /**
-     * Inicializa el componente.
-     */
     public function mount(): void
     {
         $this->name = Auth::user()->name;
     }
 
     /**
-     * Actualiza la información del perfil del usuario autenticado.
+     * Funcion: updateProfileInformation()
+     *
+     * Descripcion: Valida y guarda el nombre del usuario y emite un evento para actualizar la interfaz.
+     *
+     * Version: 1.0
      */
     public function updateProfileInformation(): void
     {

@@ -33,7 +33,11 @@ class OrderService
     public function __construct(private ReminderService $notificationService) {}
 
     /**
-     * Crea el cliente nuevo opcional, el pedido, su anticipo y el historial en una transaccion.
+     * Funcion: create()
+     *
+     * Descripcion: Crea el cliente opcional, el pedido, el anticipo y la actividad en una transaccion para evitar registros incompletos.
+     *
+     * Version: 1.0
      *
      * @param  array<string, mixed>  $data
      * @param  array{full_name: string, phone: string}|null  $newCustomerAttributes
@@ -144,7 +148,11 @@ class OrderService
     }
 
     /**
-     * Actualiza un pedido y audita los cambios relevantes dentro de una transaccion.
+     * Funcion: update()
+     *
+     * Descripcion: Actualiza el pedido y registra los cambios relevantes en una transaccion para conservar una auditoria consistente.
+     *
+     * Version: 1.0
      *
      * @param  array<string, mixed>  $data
      */
@@ -228,6 +236,13 @@ class OrderService
         }, attempts: 3);
     }
 
+    /**
+     * Funcion: changeStatus()
+     *
+     * Descripcion: Valida los pagos requeridos y registra el cambio de estado junto con su motivo en una transaccion.
+     *
+     * Version: 1.0
+     */
     public function changeStatus(Order $order, OrderStatus $destination, User $actor, ?string $reason = null): Order
     {
         return DB::transaction(function () use ($order, $destination, $actor, $reason): Order {
@@ -348,6 +363,9 @@ class OrderService
             ]);
         }
 
+        // -----------------------------------------------------------
+        // Logica critica: Mantiene la fecha original para permitir editar otros datos aunque la entrega ya haya pasado.
+        // -----------------------------------------------------------
         if ($order !== null && $deliveryAt->format('Y-m-d\\TH:i') === $order->delivery_at->format('Y-m-d\\TH:i')) {
             return $order->delivery_at;
         }

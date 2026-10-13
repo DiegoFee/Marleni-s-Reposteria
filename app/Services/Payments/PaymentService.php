@@ -18,7 +18,11 @@ use Illuminate\Validation\ValidationException;
 class PaymentService
 {
     /**
-     * Registra un pago y su auditoria con el pedido bloqueado.
+     * Funcion: register()
+     *
+     * Descripcion: Registra el pago y su actividad en una transaccion para evitar movimientos sin auditoria.
+     *
+     * Version: 1.0
      *
      * @param  array<string, mixed>  $data
      */
@@ -77,7 +81,11 @@ class PaymentService
     }
 
     /**
-     * Anula un pago conservando su registro y dejando evidencia del motivo.
+     * Funcion: void()
+     *
+     * Descripcion: Marca el pago como anulado sin borrarlo para conservar el monto y el motivo en el historial.
+     *
+     * Version: 1.0
      */
     public function void(Payment $payment, string $reason, User $actor): Payment
     {

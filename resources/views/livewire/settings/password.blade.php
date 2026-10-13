@@ -12,7 +12,11 @@ new class extends Component {
     public string $password_confirmation = '';
 
     /**
-     * Actualiza la contraseña del usuario autenticado.
+     * Funcion: updatePassword()
+     *
+     * Descripcion: Valida la contrasena actual y las reglas de seguridad; limpia los campos aun cuando falle la validacion.
+     *
+     * Version: 1.0
      */
     public function updatePassword(): void
     {
