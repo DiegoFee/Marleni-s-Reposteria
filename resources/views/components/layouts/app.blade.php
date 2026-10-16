@@ -6,7 +6,6 @@
 
         <x-loading-indicator />
         <x-page-status :status="session('status')" class="mb-4" />
-        <x-validation-errors class="mb-4" />
 
         {{ $slot }}
     </flux:main>

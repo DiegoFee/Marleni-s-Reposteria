@@ -100,11 +100,13 @@ test('payment validation displays the localized required amount message', functi
     $order = Order::factory()->for($user, 'createdBy')->create();
     $this->actingAs($user);
 
-    Volt::test('orders.show', ['order' => $order])
+    $component = Volt::test('orders.show', ['order' => $order])
         ->set('paymentAmount', '')
         ->call('savePayment')
         ->assertHasErrors('paymentAmount')
         ->assertSee('Indica el importe del pago.');
+
+    expect(substr_count($component->html(true), 'Indica el importe del pago.'))->toBe(1);
 
     expect(Payment::query()->where('order_id', $order->getKey())->count())->toBe(0);
 });

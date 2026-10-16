@@ -17,6 +17,9 @@ return new class extends Migration
         $usedNames = [];
         $usedPhones = [];
 
+        // -----------------------------------------------------------
+        // Logica critica: Normaliza contactos y aborta ante formatos invalidos o duplicados antes de crear indices unicos.
+        // -----------------------------------------------------------
         DB::transaction(function () use (&$usedNames, &$usedPhones): void {
             DB::table('customers')
                 ->select(['id', 'full_name', 'phone'])

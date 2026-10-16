@@ -29,6 +29,9 @@ class PaymentService
     public function register(Order $order, array $data, User $actor): Payment
     {
         return DB::transaction(function () use ($order, $data, $actor): Payment {
+            // -----------------------------------------------------------
+            // Logica critica: El bloqueo serializa el calculo del saldo con otros registros de pago.
+            // -----------------------------------------------------------
             $lockedOrder = Order::query()
                 ->whereKey($order->getKey())
                 ->lockForUpdate()
@@ -93,6 +96,9 @@ class PaymentService
             $paymentReference = Payment::query()
                 ->whereKey($payment->getKey())
                 ->firstOrFail();
+            // -----------------------------------------------------------
+            // Logica critica: Bloquea el pedido para coordinar la anulacion con pagos y cambios de estado concurrentes.
+            // -----------------------------------------------------------
             $lockedOrder = Order::query()
                 ->whereKey($paymentReference->order_id)
                 ->lockForUpdate()

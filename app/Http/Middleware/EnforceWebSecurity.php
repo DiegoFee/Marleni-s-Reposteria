@@ -10,6 +10,9 @@ class EnforceWebSecurity
 {
     public function handle(Request $request, Closure $next): Response
     {
+        // -----------------------------------------------------------
+        // Logica critica: Oculta las rutas internas de Boost para impedir su acceso desde la aplicacion.
+        // -----------------------------------------------------------
         if ($request->is('_boost', '_boost/*')) {
             abort(404);
         }

@@ -186,6 +186,13 @@ new class extends Component {
         unset($this->customerOptions);
     }
 
+    /**
+     * Funcion: save()
+     *
+     * Descripcion: Valida el formulario y coordina el registro del pedido con el cliente opcional antes de abrir su detalle.
+     *
+     * Version: 1.0
+     */
     public function save(): void
     {
         Gate::authorize('create', Order::class);
@@ -237,7 +244,8 @@ new class extends Component {
     }
 }; ?>
 
-<div class="mx-auto flex w-full max-w-7xl flex-col gap-8">
+{{-- Descripcion: Formulario para registrar un pedido con cliente nuevo opcional, precio y anticipo. --}}
+<div wire:poll.5s class="mx-auto flex w-full max-w-7xl flex-col gap-8">
         <header class="flex flex-col gap-3">
             <a href="{{ route('orders.index') }}" wire:navigate class="text-sm font-semibold text-accent hover:underline" title="{{ __('Volver al listado de pedidos') }}">← {{ __('Volver a pedidos') }}</a>
             <div class="flex flex-col gap-2">
@@ -254,13 +262,11 @@ new class extends Component {
         </header>
 
         <form wire:submit="save" class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(20rem,26rem)]">
-            <x-validation-errors class="xl:col-span-2" />
             <div class="flex flex-col gap-6">
                 <section class="rounded-2xl border border-brand-200 bg-white p-6 shadow-sm dark:border-brand-800 dark:bg-brand-900/50">
                     <div class="flex flex-col gap-2">
                         <h2 class="text-lg font-semibold text-brand-950 dark:text-brand-50">{{ __('Cliente') }} *</h2>
                         <p class="text-sm text-brand-700 dark:text-brand-200">{{ __('Busca un cliente existente o registra uno sin salir del pedido.') }}</p>
-                        <p class="text-xs text-brand-600 dark:text-brand-300"><span aria-hidden="true">*</span> {{ __('Campo obligatorio') }}</p>
                     </div>
 
                     <div class="mt-5 flex flex-col gap-4">
@@ -312,11 +318,9 @@ new class extends Component {
                             <div class="grid gap-4 rounded-xl border border-brand-200 bg-brand-50 p-4 dark:border-brand-700 dark:bg-brand-950/50 sm:grid-cols-2">
                                 <div>
                                     <flux:input wire:model="customerContact.fullName" label="{{ __('Nombre completo') }} *" name="customerContact.fullName" maxlength="100" :invalid="$errors->has('customerContact.fullName')" aria-invalid="{{ $errors->has('customerContact.fullName') ? 'true' : 'false' }}" required />
-                                    <flux:error name="customerContact.fullName" />
                                 </div>
                                 <div x-data="customerPhoneInput" x-on:input="format($event)">
                                     <flux:input wire:model="customerContact.phone" label="{{ __('Teléfono') }} *" name="customerContact.phone" type="tel" inputmode="numeric" maxlength="9" description="{{ __('Ocho dígitos; el guion es solo de presentación.') }}" :invalid="$errors->has('customerContact.phone')" aria-invalid="{{ $errors->has('customerContact.phone') ? 'true' : 'false' }}" required />
-                                    <flux:error name="customerContact.phone" />
                                 </div>
                                 <p class="text-sm text-brand-700 dark:text-brand-200 sm:col-span-2">{{ __('El cliente se guardará junto con el pedido al pulsar “Guardar pedido”.') }}</p>
                                 <div class="flex flex-col gap-2 sm:col-span-2 sm:flex-row sm:justify-end">
@@ -345,7 +349,6 @@ new class extends Component {
                                 <flux:select.option value="standard">{{ __('Estándar') }}</flux:select.option>
                                 <flux:select.option value="custom">{{ __('Personalizado') }}</flux:select.option>
                                 </flux:select>
-                                <flux:error name="captureMode" />
                             </div>
 
                         @if ($captureMode === CaptureMode::Standard->value)
@@ -355,7 +358,6 @@ new class extends Component {
                                     <flux:select.option value="{{ $category->id }}">{{ $category->name }}</flux:select.option>
                                 @endforeach
                                     </flux:select>
-                                    <flux:error name="cakeCategoryId" />
                                 </div>
 
                             <div>
@@ -364,12 +366,10 @@ new class extends Component {
                                     <flux:select.option value="{{ $basePrice->id }}">Q {{ number_format((float) $basePrice->amount, 2, '.', ',') }}</flux:select.option>
                                 @endforeach
                                 </flux:select>
-                                <flux:error name="basePriceId" />
                             </div>
                         @else
                             <div class="md:col-span-2">
                                 <flux:textarea wire:model="cakeDescription" label="{{ __('Descripción del pastel') }} *" placeholder="{{ __('Describe el diseño, sabor o detalles solicitados') }}" rows="4" :invalid="$errors->has('cakeDescription')" aria-invalid="{{ $errors->has('cakeDescription') ? 'true' : 'false' }}" required />
-                                <flux:error name="cakeDescription" />
                             </div>
                         @endif
                     </div>
@@ -394,7 +394,6 @@ new class extends Component {
                         </flux:field>
                         <div>
                             <flux:input wire:model="deliveryAt" label="{{ __('Fecha y hora de entrega') }} *" type="datetime-local" min="{{ $this->minimumDeliveryAt() }}" :invalid="$errors->has('deliveryAt')" aria-invalid="{{ $errors->has('deliveryAt') ? 'true' : 'false' }}" required />
-                            <flux:error name="deliveryAt" />
                         </div>
                         <flux:field>
                             <flux:label>{{ __('Anticipo inicial') }}</flux:label>

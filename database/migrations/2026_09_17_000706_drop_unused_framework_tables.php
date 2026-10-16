@@ -21,6 +21,9 @@ return new class extends Migration
      */
     public function up(): void
     {
+        // -----------------------------------------------------------
+        // Logica critica: Conserva las tablas activas y aborta si una tabla restante contiene datos antes de eliminarla.
+        // -----------------------------------------------------------
         $protectedTables = $this->protectedTables();
 
         foreach (self::UNUSED_TABLES as $table) {

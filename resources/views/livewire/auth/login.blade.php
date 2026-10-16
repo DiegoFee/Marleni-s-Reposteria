@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\User;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\RateLimiter;
@@ -28,12 +29,22 @@ new #[Layout('components.layouts.auth')] class extends Component {
      */
     public function login(): void
     {
-        $this->username = Str::lower(trim($this->username));
         $this->validate();
 
         $this->ensureIsNotRateLimited();
 
-        if (! Auth::attempt(['username' => $this->username, 'password' => $this->password], $this->remember)) {
+        $user = User::query()->where('username', $this->username)->first();
+
+        if ($user?->username !== $this->username) {
+            $user = null;
+        }
+
+        $credentials = [
+            'id' => $user?->getAuthIdentifier(),
+            'password' => $this->password,
+        ];
+
+        if (! Auth::attempt($credentials, $this->remember)) {
             RateLimiter::hit($this->throttleKey());
             RateLimiter::hit($this->ipThrottleKey());
 

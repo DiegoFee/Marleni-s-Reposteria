@@ -922,11 +922,14 @@ test('terminal orders cannot be edited after delivery', function () {
     $order = Order::factory()->delivered()->for($user, 'createdBy')->create();
     $this->actingAs($user);
 
-    Volt::test('orders.show', ['order' => $order])
+    $component = Volt::test('orders.show', ['order' => $order])
         ->call('startEditing')
         ->assertHasErrors('status')
+        ->assertSee('Los pedidos entregados o cancelados ya no se pueden editar.')
         ->call('saveChanges')
         ->assertHasErrors('status');
+
+    expect(substr_count($component->html(true), 'Los pedidos entregados o cancelados ya no se pueden editar.'))->toBe(1);
 
     expect($order->refresh()->status->value)->toBe('delivered');
 });

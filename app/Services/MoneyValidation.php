@@ -9,6 +9,13 @@ final class MoneyValidation
 {
     public const MAX_AMOUNT = '99999999.99';
 
+    /**
+     * Funcion: formatInputValue()
+     *
+     * Descripcion: Formatea importes validos sin alterar valores invalidos ni redondear entradas con mas de dos decimales.
+     *
+     * Version: 1.0
+     */
     public static function formatInputValue(mixed $value): string
     {
         if (! is_scalar($value)) {

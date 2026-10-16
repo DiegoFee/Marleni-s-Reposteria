@@ -29,6 +29,9 @@ class OrderPolicy
         return $user->isOwner();
     }
 
+    // -----------------------------------------------------------
+    // Logica critica: La asistente solo cambia el estado de pedidos pendientes que no estan archivados.
+    // -----------------------------------------------------------
     public function changeStatus(User $user, Order $order): bool
     {
         return in_array($user->role, [UserRole::Owner, UserRole::Assistant], true)
@@ -51,6 +54,9 @@ class OrderPolicy
         return $user->isOwner() && ! $order->trashed();
     }
 
+    // -----------------------------------------------------------
+    // Logica critica: Solo la duena elimina pedidos archivados o entregados de forma permanente.
+    // -----------------------------------------------------------
     public function forceDelete(User $user, Order $order): bool
     {
         return $user->isOwner()

@@ -10,6 +10,12 @@ use Illuminate\Validation\Rule;
 class OrderFormRules
 {
     /**
+     * Funcion: order()
+     *
+     * Descripcion: Construye reglas segun la modalidad, el cliente nuevo, la fecha de entrega y el anticipo requerido.
+     *
+     * Version: 1.0
+     *
      * @return array<string, array<int, mixed>>
      */
     public static function order(

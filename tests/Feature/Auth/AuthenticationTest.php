@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\User;
+use Illuminate\Support\Facades\Hash;
 use Livewire\Volt\Volt as LivewireVolt;
 
 test('login screen can be rendered', function () {
@@ -27,6 +28,48 @@ test('users can authenticate using the login screen', function () {
         ->assertRedirect(route('dashboard', absolute: false));
 
     $this->assertAuthenticated();
+});
+
+test('username matching is case-sensitive', function () {
+    $user = User::factory()->create(['username' => 'marleni']);
+
+    $component = LivewireVolt::test('auth.login')
+        ->set('username', 'MARLENI')
+        ->set('password', 'password')
+        ->call('login')
+        ->assertHasErrors('username')
+        ->assertSee(__('auth.failed'));
+
+    expect(substr_count($component->html(true), __('auth.failed')))->toBe(1);
+
+    $this->assertGuest();
+});
+
+test('users can authenticate with the exact mixed-case username', function () {
+    $user = User::factory()->create(['username' => 'Marleni']);
+
+    LivewireVolt::test('auth.login')
+        ->set('username', 'Marleni')
+        ->set('password', 'password')
+        ->call('login')
+        ->assertHasNoErrors()
+        ->assertRedirect(route('dashboard', absolute: false));
+
+    $this->assertAuthenticatedAs($user);
+});
+
+test('password matching remains case-sensitive', function () {
+    $user = User::factory()->create([
+        'password' => Hash::make('CaseSensitivePassword9!'),
+    ]);
+
+    LivewireVolt::test('auth.login')
+        ->set('username', $user->username)
+        ->set('password', 'casesensitivepassword9!')
+        ->call('login')
+        ->assertHasErrors('username');
+
+    $this->assertGuest();
 });
 
 test('users can not authenticate with invalid password', function () {

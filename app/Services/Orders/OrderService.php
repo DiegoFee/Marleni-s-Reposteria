@@ -159,6 +159,9 @@ class OrderService
     public function update(Order $order, array $data, User $actor): Order
     {
         return DB::transaction(function () use ($order, $data, $actor): Order {
+            // -----------------------------------------------------------
+            // Logica critica: El bloqueo serializa la validacion del precio con los cambios de pago concurrentes.
+            // -----------------------------------------------------------
             $lockedOrder = Order::query()
                 ->whereKey($order->getKey())
                 ->lockForUpdate()
@@ -246,6 +249,9 @@ class OrderService
     public function changeStatus(Order $order, OrderStatus $destination, User $actor, ?string $reason = null): Order
     {
         return DB::transaction(function () use ($order, $destination, $actor, $reason): Order {
+            // -----------------------------------------------------------
+            // Logica critica: El bloqueo coordina el cambio de estado con los pagos y permite revisar el saldo actualizado.
+            // -----------------------------------------------------------
             $lockedOrder = Order::query()
                 ->whereKey($order->getKey())
                 ->lockForUpdate()

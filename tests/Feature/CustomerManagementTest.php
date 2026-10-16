@@ -115,13 +115,15 @@ test('order creation rejects a customer contact that is already in use', functio
         'phone' => '55550000',
     ]);
 
-    Volt::test('orders.create')
+    $component = Volt::test('orders.create')
         ->set('showCustomerForm', true)
         ->set('customerContact.fullName', 'Otro cliente')
         ->set('customerContact.phone', '55550000')
         ->call('selectNewCustomer')
         ->assertHasErrors('customerContact.phone')
         ->assertSee('El valor de teléfono ya está registrado.');
+
+    expect(substr_count($component->html(true), 'El valor de teléfono ya está registrado.'))->toBe(1);
 
     expect(Customer::query()->count())->toBe(1);
 });
@@ -188,7 +190,7 @@ test('customer forms explain duplicate names and phone numbers', function () {
         'phone' => '55550000',
     ]);
 
-    Volt::test('customers.index')
+    $component = Volt::test('customers.index')
         ->call('startCreating')
         ->set('customerContact.fullName', 'Cliente existente')
         ->set('customerContact.phone', '55550000')
@@ -196,4 +198,7 @@ test('customer forms explain duplicate names and phone numbers', function () {
         ->assertHasErrors(['customerContact.fullName', 'customerContact.phone'])
         ->assertSee('El valor de nombre completo ya está registrado.')
         ->assertSee('El valor de teléfono ya está registrado.');
+
+    expect(substr_count($component->html(true), 'El valor de nombre completo ya está registrado.'))->toBe(1);
+    expect(substr_count($component->html(true), 'El valor de teléfono ya está registrado.'))->toBe(1);
 });

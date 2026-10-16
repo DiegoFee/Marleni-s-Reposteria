@@ -94,6 +94,13 @@ new class extends Component
         return $deliveryAt?->format('d/m/Y H:i') ?? '—';
     }
 
+    /**
+     * Funcion: ordersWithinWindow()
+     *
+     * Descripcion: Filtra entregas por rango horario y controla si incluye el limite superior para evitar solapamientos entre ventanas.
+     *
+     * Version: 1.0
+     */
     private function ordersWithinWindow(int $fromHours, int $toHours, bool $includeStart): Collection
     {
         $now = now();
@@ -112,7 +119,8 @@ new class extends Component
     }
 }; ?>
 
-<div class="mx-auto flex w-full max-w-7xl flex-col gap-8">
+{{-- Descripcion: Panel con pedidos pendientes organizados por proximidad de entrega y saldo. --}}
+<div wire:poll.5s class="mx-auto flex w-full max-w-7xl flex-col gap-8">
     <section class="relative isolate overflow-hidden rounded-[2rem] bg-gradient-to-br from-brand-800 via-brand-700 to-brand-950 p-6 text-white shadow-xl shadow-brand-900/15 sm:p-8">
         <div class="absolute -end-16 -top-24 size-72 rounded-full border border-brand-200/20 bg-brand-300/10"></div>
         <div class="absolute -bottom-32 -start-20 size-80 rounded-full border border-white/10 bg-brand-500/20"></div>

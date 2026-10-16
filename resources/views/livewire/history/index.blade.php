@@ -134,6 +134,13 @@ new class extends Component {
         $this->deletingOrderId = null;
     }
 
+    /**
+     * Funcion: deleteOrder()
+     *
+     * Descripcion: Confirma la contrasena antes de borrar el pedido y delega al servicio el resguardo de la evidencia.
+     *
+     * Version: 1.0
+     */
     public function deleteOrder(OrderDeletionService $orderDeletionService): void
     {
         $order = $this->historyOrdersQuery()
@@ -353,7 +360,8 @@ new class extends Component {
     }
 }; ?>
 
-<div class="mx-auto flex w-full max-w-7xl flex-col gap-8">
+{{-- Descripcion: Historial de pedidos archivados con consulta de actividad y borrado permanente protegido. --}}
+<div wire:poll.5s class="mx-auto flex w-full max-w-7xl flex-col gap-8">
     <header class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div class="flex flex-col gap-2">
             <p class="text-sm font-semibold uppercase tracking-[0.18em] text-brand-600 dark:text-brand-300">

@@ -48,6 +48,12 @@ final class CustomerContactData
     }
 
     /**
+     * Funcion: rules()
+     *
+     * Descripcion: Valida el nombre y telefono del cliente y excluye el registro actual al comprobar datos unicos.
+     *
+     * Version: 1.0
+     *
      * @return array<string, array<int, mixed>>
      */
     public static function rules(
@@ -104,6 +110,13 @@ final class CustomerContactData
         ];
     }
 
+    /**
+     * Funcion: uniqueConstraintField()
+     *
+     * Descripcion: Relaciona las restricciones unicas de la base de datos con el campo correspondiente del formulario.
+     *
+     * Version: 1.0
+     */
     public static function uniqueConstraintField(QueryException $exception): ?string
     {
         $message = strtolower($exception->getMessage());

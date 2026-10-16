@@ -18,6 +18,9 @@ return new class extends Migration
             $table->string('username', 60)->nullable()->after('name')->unique();
         });
 
+        // -----------------------------------------------------------
+        // Logica critica: Genera nombres de usuario unicos a partir del correo antes de volver obligatorio el campo.
+        // -----------------------------------------------------------
         $usedUsernames = [];
 
         DB::transaction(function () use (&$usedUsernames): void {

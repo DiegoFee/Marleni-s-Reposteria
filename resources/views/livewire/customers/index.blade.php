@@ -113,6 +113,13 @@ new class extends Component {
         $this->resetValidation();
     }
 
+    /**
+     * Funcion: deleteCustomer()
+     *
+     * Descripcion: Impide archivar clientes con pedidos pendientes o pagos activos para conservar la integridad de sus registros.
+     *
+     * Version: 1.0
+     */
     public function deleteCustomer(): void
     {
         $customer = Customer::query()->findOrFail($this->deletingCustomerId);
@@ -150,7 +157,8 @@ new class extends Component {
     }
 }; ?>
 
-<div class="mx-auto flex w-full max-w-7xl flex-col gap-8">
+{{-- Descripcion: Listado de clientes con busqueda, edicion y validacion previa al borrado. --}}
+<div wire:poll.5s class="mx-auto flex w-full max-w-7xl flex-col gap-8">
         <header class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div class="flex flex-col gap-2">
                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-brand-600 dark:text-brand-300">
@@ -286,18 +294,14 @@ new class extends Component {
                              {{ $editingCustomerId === null ? __('Nuevo cliente') : __('Editar cliente') }}
                          </h2>
                          <p class="text-sm text-brand-700 dark:text-brand-200">{{ __('Completa el nombre y teléfono de contacto.') }}</p>
-                         <p class="text-xs text-brand-600 dark:text-brand-300"><span aria-hidden="true">*</span> {{ __('Campo obligatorio') }}</p>
                      </div>
 
                      <form wire:submit="saveCustomer" class="mt-6 flex min-w-0 w-full flex-col gap-4">
-                         <x-validation-errors :fields="['customerContact.fullName', 'customerContact.phone']" />
                          <div>
                              <flux:input wire:model="customerContact.fullName" label="{{ __('Nombre completo') }} *" name="customerContact.fullName" maxlength="100" :invalid="$errors->has('customerContact.fullName')" aria-invalid="{{ $errors->has('customerContact.fullName') ? 'true' : 'false' }}" required autofocus class="min-w-0 w-full" />
-                             <flux:error name="customerContact.fullName" />
                          </div>
                          <div x-data="customerPhoneInput" x-on:input="format($event)">
                              <flux:input wire:model="customerContact.phone" label="{{ __('Teléfono') }} *" name="customerContact.phone" type="tel" inputmode="numeric" maxlength="9" description="{{ __('Ocho dígitos; el guion es solo de presentación.') }}" :invalid="$errors->has('customerContact.phone')" aria-invalid="{{ $errors->has('customerContact.phone') ? 'true' : 'false' }}" required class="min-w-0 w-full" />
-                             <flux:error name="customerContact.phone" />
                          </div>
 
                         <div class="flex flex-col gap-2 sm:flex-row sm:justify-end">
